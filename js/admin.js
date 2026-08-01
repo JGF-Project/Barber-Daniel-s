@@ -1263,6 +1263,57 @@ const AbasAdmin = {
 };
 
 /* ============================================================
+   MENU DO PAINEL (mobile) — gaveta lateral aberta pelo hambúrguer
+============================================================ */
+const MenuPainel = {
+  init() {
+    this.botao = $('#painel-menu-toggle');
+    this.painel = $('#abas-lateral');
+    this.fundo = $('#painel-overlay');
+    if (!this.botao || !this.painel) return;
+
+    this.botao.addEventListener('click', () => this.alternar());
+    this.fundo?.addEventListener('click', () => this.fechar());
+
+    // Escolher uma seção fecha a gaveta automaticamente
+    $$('.aba', this.painel).forEach((aba) => {
+      aba.addEventListener('click', () => this.fechar());
+    });
+
+    document.addEventListener('keydown', (evento) => {
+      if (evento.key === 'Escape' && this.estaAberto()) {
+        this.fechar();
+        this.botao.focus();
+      }
+    });
+  },
+
+  estaAberto() {
+    return this.botao.getAttribute('aria-expanded') === 'true';
+  },
+
+  alternar() {
+    this.estaAberto() ? this.fechar() : this.abrir();
+  },
+
+  abrir() {
+    this.botao.setAttribute('aria-expanded', 'true');
+    this.botao.setAttribute('aria-label', 'Fechar menu');
+    this.painel.classList.add('aberta');
+    this.fundo?.classList.add('aberta');
+    document.body.style.overflow = 'hidden';
+  },
+
+  fechar() {
+    this.botao.setAttribute('aria-expanded', 'false');
+    this.botao.setAttribute('aria-label', 'Abrir menu');
+    this.painel.classList.remove('aberta');
+    this.fundo?.classList.remove('aberta');
+    document.body.style.overflow = '';
+  },
+};
+
+/* ============================================================
    DROPDOWN ESTILIZADO
    ------------------------------------------------------------
    Substitui a lista nativa do <select> (que segue o estilo do
@@ -1292,7 +1343,17 @@ function estilizarSelect(select) {
   wrap.append(botao, lista);
 
   const fechar = () => { lista.hidden = true; botao.classList.remove('aberto'); botao.setAttribute('aria-expanded', 'false'); };
-  const abrir  = () => { lista.hidden = false; botao.classList.add('aberto'); botao.setAttribute('aria-expanded', 'true'); };
+  const abrir = () => {
+    // position:fixed é posicionado na viewport, não no wrap — recalcula a cada abertura
+    // (a página pode ter rolado ou o layout mudado desde a última vez).
+    const r = botao.getBoundingClientRect();
+    lista.style.top = `${r.bottom + 6}px`;
+    lista.style.left = `${r.left}px`;
+    lista.style.width = `${r.width}px`;
+    lista.hidden = false;
+    botao.classList.add('aberto');
+    botao.setAttribute('aria-expanded', 'true');
+  };
 
   function render() {
     const atual = select.options[select.selectedIndex];
@@ -1329,6 +1390,7 @@ function estilizarSelect(select) {
 document.addEventListener('DOMContentLoaded', () => {
   $('#ano-atual').textContent = new Date().getFullYear();
   AbasAdmin.init();
+  MenuPainel.init();
   Agenda.init();
   Relatorios.init();
   Servicos.init();

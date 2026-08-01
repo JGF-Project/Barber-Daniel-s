@@ -13,8 +13,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="app.css?v=3">
 </head>
 
 <body class="pagina-app pagina-admin">
@@ -94,8 +94,15 @@
         <h1 class="secao__titulo">Sua <em>barbearia.</em></h1>
       </header>
 
+      <button class="menu-toggle painel-menu-toggle" type="button" id="painel-menu-toggle" aria-expanded="false" aria-label="Abrir menu" aria-controls="abas-lateral">
+        <span class="menu-toggle__linha"></span>
+        <span class="menu-toggle__linha"></span>
+        <span class="menu-toggle__linha"></span>
+      </button>
+      <div class="painel-overlay" id="painel-overlay"></div>
+
       <div class="painel-layout">
-        <nav class="abas abas--lateral" role="tablist" aria-orientation="vertical" aria-label="Seções do painel">
+        <nav class="abas abas--lateral" id="abas-lateral" role="tablist" aria-orientation="vertical" aria-label="Seções do painel">
           <button class="aba ativa" id="aba-agenda" role="tab" aria-selected="true" aria-controls="painel-agenda" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
             <span>Agenda</span>
