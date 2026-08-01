@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agendar horário | Barber Daniel's</title>
+  <meta name="description" content="Agende seu corte, barba ou sobrancelha online na Barber Daniel's — sem precisar criar conta.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#111111">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+
+<body class="pagina-app">
+
+  <a class="pular-conteudo" href="#conteudo">Pular para o conteúdo principal</a>
+
+  <!-- Ícones reutilizáveis -->
+  <svg class="sprite" aria-hidden="true" focusable="false">
+    <symbol id="icone-check" viewBox="0 0 24 24">
+      <path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </svg>
+
+  <!-- ============ CABEÇALHO SIMPLES ============ -->
+  <header class="app-cabecalho">
+    <div class="container app-cabecalho__barra">
+      <a class="logo" href="index.html" aria-label="Barber Daniel's — voltar ao site">
+        <svg class="logo__marca" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+          <circle cx="14.5" cy="20" r="6" stroke="currentColor" stroke-width="2.4"/>
+          <circle cx="14.5" cy="44" r="6" stroke="currentColor" stroke-width="2.4"/>
+          <path d="M19.5 23.5 52 40.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M19.5 40.5 52 23.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+          <circle cx="35.75" cy="32" r="2.3" fill="currentColor"/>
+        </svg>
+        <span class="logo__texto">Barber Daniel's<small>Barbearia</small></span>
+      </a>
+
+      <div class="app-cabecalho__acoes">
+        <a class="app-link-voltar" href="index.html">← Voltar ao site</a>
+        <!-- Preenchido via JS quando logado -->
+        <div class="app-usuario" id="area-usuario" hidden>
+          <!-- Coroa: só aparece para assinante (Auth.renderizar) -->
+          <span class="selo-assinante" id="selo-assinante" title="Assinante do plano mensal" hidden>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3 7l4.5 3.5L12 4l4.5 6.5L21 7l-1.8 11.2a1 1 0 0 1-1 .8H5.8a1 1 0 0 1-1-.8L3 7z"/>
+            </svg>
+            Assinante
+          </span>
+          <span class="app-usuario__nome" id="usuario-nome"></span>
+          <button class="botao botao--fantasma botao--pequeno" type="button" id="botao-sair">Sair</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="conteudo" class="container app-principal">
+
+    <header class="app-titulo">
+      <p class="secao__etiqueta">Agendamento online</p>
+      <h1 class="secao__titulo">Reserve seu <em>horário.</em></h1>
+    </header>
+
+    <!-- Abas: novo agendamento / meus agendamentos -->
+    <div class="abas" role="tablist" aria-label="Área do cliente">
+      <button class="aba ativa" id="aba-novo" role="tab" aria-selected="true" aria-controls="painel-novo" type="button">Novo agendamento</button>
+      <button class="aba" id="aba-meus" role="tab" aria-selected="false" aria-controls="painel-meus" type="button">Meus agendamentos</button>
+      <!-- Só é revelada para quem é assinante (Assinatura.aplicar) -->
+      <button class="aba" id="aba-assinatura" role="tab" aria-selected="false" aria-controls="painel-assinatura" type="button" hidden>Minha assinatura</button>
+    </div>
+
+    <!-- ============================================================
+         PAINEL: NOVO AGENDAMENTO
+    ============================================================ -->
+    <section class="painel" id="painel-novo" role="tabpanel" aria-labelledby="aba-novo">
+
+      <!-- Passo 1: barbeiro -->
+      <div class="passo">
+        <h2 class="passo__titulo"><span class="passo__numero">1</span> Escolha o barbeiro</h2>
+        <div class="opcoes-servico" id="lista-barbeiros" aria-live="polite">
+          <p class="app-carregando">Carregando barbeiros…</p>
+        </div>
+      </div>
+
+      <!-- Passo 2: serviço(s) -->
+      <div class="passo">
+        <h2 class="passo__titulo"><span class="passo__numero">2</span> Escolha o serviço</h2>
+        <p class="app-aviso-passo">Pode escolher mais de um — o tempo e o valor são somados.</p>
+        <div class="opcoes-servico" id="lista-servicos" aria-live="polite">
+          <p class="app-carregando">Carregando serviços…</p>
+        </div>
+        <p class="servicos-total" id="servicos-total" role="status" hidden></p>
+      </div>
+
+      <!-- Passo 3: dia -->
+      <div class="passo">
+        <h2 class="passo__titulo"><span class="passo__numero">3</span> Escolha o dia</h2>
+        <div class="calendario" id="lista-dias"></div>
+      </div>
+
+      <!-- Passo 4: horário -->
+      <div class="passo">
+        <h2 class="passo__titulo"><span class="passo__numero">4</span> Escolha o horário</h2>
+        <div class="opcoes-horario" id="lista-horarios" aria-live="polite">
+          <p class="app-aviso-passo">Selecione o barbeiro, o serviço e o dia para ver os horários livres.</p>
+        </div>
+      </div>
+
+      <!-- Resumo + confirmação -->
+      <div class="resumo vidro" id="resumo" hidden>
+        <div class="resumo__dados">
+          <h2>Resumo</h2>
+          <p id="resumo-texto"></p>
+        </div>
+        <button class="botao botao--primario botao--grande" type="button" id="botao-confirmar">
+          <span class="botao__rotulo">Confirmar agendamento</span>
+          <span class="botao__carregando" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <p class="app-erro" id="erro-agendar" role="alert" hidden></p>
+
+      <!-- Sucesso -->
+      <div class="app-sucesso vidro" id="sucesso-agendar" role="status" hidden>
+        <span class="formulario__sucesso-icone" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><use href="#icone-check"/></svg>
+        </span>
+        <h2 tabindex="-1" id="sucesso-agendar-titulo">Horário reservado!</h2>
+        <p id="sucesso-agendar-texto"></p>
+        <div class="app-sucesso__acoes">
+          <button class="botao botao--primario" type="button" id="botao-ver-meus">Ver meus agendamentos</button>
+          <button class="botao botao--fantasma" type="button" id="botao-agendar-outro">Agendar outro</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         PAINEL: MEUS AGENDAMENTOS
+    ============================================================ -->
+    <section class="painel" id="painel-meus" role="tabpanel" aria-labelledby="aba-meus" hidden>
+      <div id="lista-meus" aria-live="polite">
+        <p class="app-carregando">Carregando…</p>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         PAINEL: MINHA ASSINATURA — revelado só para assinante.
+         O regulamento é o mesmo que a barbearia já divulga; fica inline
+         porque o objetivo é não poluir a tela de quem não assina.
+    ============================================================ -->
+    <section class="painel" id="painel-assinatura" role="tabpanel" aria-labelledby="aba-assinatura" hidden>
+      <div class="plano-cabecalho vidro">
+        <span class="selo-assinante selo-assinante--grande">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M3 7l4.5 3.5L12 4l4.5 6.5L21 7l-1.8 11.2a1 1 0 0 1-1 .8H5.8a1 1 0 0 1-1-.8L3 7z"/>
+          </svg>
+          Seu plano
+        </span>
+        <h2 id="plano-nome">—</h2>
+        <p id="plano-descricao"></p>
+        <p class="plano-cota" id="plano-cota"></p>
+      </div>
+
+      <div class="painel-texto vidro">
+        <h3>Regulamento &amp; vantagens</h3>
+        <ul class="plano-regras">
+          <li><strong>Agendamentos limitados:</strong> 4 por mês, sendo 1 agendamento por semana. Os agendamentos não são cumulativos para a semana seguinte.</li>
+          <li><strong>Falta no agendamento:</strong> em caso de falta no dia e hora agendados, sem aviso prévio de 24 horas, o agendamento daquela semana será contado como serviço concluído.</li>
+          <li><strong>Dias de atendimento:</strong> o atendimento do plano mensal é realizado exclusivamente de segunda a sexta-feira.</li>
+          <li><strong>Sábado não incluso:</strong> o sábado não faz parte do plano mensal.</li>
+          <li><strong>Horários:</strong> sujeitos à disponibilidade da agenda (seg–sex).</li>
+          <li><strong>Observações:</strong> serviços de corte, barba e sobrancelha inclusos, conforme o seu plano.</li>
+        </ul>
+        <p class="app-aviso-passo">
+          Passou do limite do mês? Você continua podendo agendar normalmente pelos
+          serviços avulsos, pagando o valor de cada um.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         VISITANTE — agendar sem criar conta (só nome + telefone).
+         Aparece ao confirmar deslogado; é a opção padrão.
+    ============================================================ -->
+    <section class="auth vidro" id="area-visitante" hidden aria-label="Agendar sem criar conta">
+      <h2 class="auth__titulo">Quase lá</h2>
+      <p class="app-aviso-passo">Só precisamos do seu nome e telefone para confirmar o horário.</p>
+
+      <form class="formulario" id="form-visitante" novalidate>
+        <div class="formulario__campo">
+          <label for="visitante-nome">Nome</label>
+          <input type="text" id="visitante-nome" autocomplete="name" placeholder="Seu nome completo" required>
+        </div>
+        <div class="formulario__campo">
+          <label for="visitante-celular">Celular</label>
+          <input type="tel" id="visitante-celular" autocomplete="tel-national" inputmode="numeric" maxlength="15" placeholder="(11) 98765-4321" required>
+        </div>
+        <p class="formulario__aviso-privacidade">
+          Usamos seu contato só para falar sobre este agendamento.
+          Veja nossa <a href="privacidade.html" target="_blank" rel="noopener">política de privacidade</a>.
+        </p>
+        <button class="botao botao--primario botao--bloco" type="submit">
+          <span class="botao__rotulo">Confirmar agendamento</span>
+          <span class="botao__carregando" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <p class="app-erro" id="erro-visitante" role="alert" hidden></p>
+
+      <p class="auth__alternativa">
+        Tem conta ou plano mensal?
+        <button class="link-sutil" type="button" id="link-usar-conta">Entrar na minha conta</button>
+      </p>
+    </section>
+
+    <!-- ============================================================
+         AUTENTICAÇÃO (aparece quando é preciso entrar)
+    ============================================================ -->
+    <section class="auth vidro" id="area-auth" hidden aria-label="Entrar ou criar conta">
+      <div class="abas abas--auth" id="abas-auth" role="tablist" aria-label="Entrar ou criar conta">
+        <button class="aba ativa" id="aba-entrar" role="tab" aria-selected="true" aria-controls="form-entrar" type="button">Entrar</button>
+        <button class="aba" id="aba-criar" role="tab" aria-selected="false" aria-controls="form-criar" type="button">Criar conta</button>
+      </div>
+
+      <!-- Entrar -->
+      <form class="formulario" id="form-entrar" novalidate>
+        <div class="formulario__campo">
+          <label for="entrar-email">Email</label>
+          <input type="email" id="entrar-email" autocomplete="email" placeholder="seuemail@exemplo.com" required>
+        </div>
+        <div class="formulario__campo">
+          <label for="entrar-senha">Senha</label>
+          <input type="password" id="entrar-senha" autocomplete="current-password" placeholder="Sua senha" required>
+        </div>
+        <button class="botao botao--primario botao--bloco" type="submit">
+          <span class="botao__rotulo">Entrar</span>
+          <span class="botao__carregando" aria-hidden="true"></span>
+        </button>
+        <button class="link-sutil" type="button" id="link-esqueci-senha">Esqueci minha senha</button>
+      </form>
+
+      <!-- Criar conta -->
+      <form class="formulario" id="form-criar" novalidate hidden>
+        <div class="formulario__campo">
+          <label for="criar-nome">Nome</label>
+          <input type="text" id="criar-nome" autocomplete="name" placeholder="Seu nome completo" required>
+        </div>
+        <div class="formulario__campo">
+          <label for="criar-celular">Celular</label>
+          <input type="tel" id="criar-celular" autocomplete="tel-national" inputmode="numeric" maxlength="15" placeholder="(11) 98765-4321" required>
+        </div>
+        <div class="formulario__campo">
+          <label for="criar-email">Email</label>
+          <input type="email" id="criar-email" autocomplete="email" placeholder="seuemail@exemplo.com" required>
+        </div>
+        <div class="formulario__campo">
+          <label for="criar-senha">Senha</label>
+          <input type="password" id="criar-senha" autocomplete="new-password" placeholder="Mínimo 6 caracteres" minlength="6" required>
+        </div>
+        <p class="formulario__aviso-privacidade">
+          Seus dados são usados só para gerenciar seus agendamentos nesta barbearia.
+          Veja nossa <a href="privacidade.html" target="_blank" rel="noopener">política de privacidade</a>.
+        </p>
+        <button class="botao botao--primario botao--bloco" type="submit">
+          <span class="botao__rotulo">Criar conta</span>
+          <span class="botao__carregando" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <!-- Recuperar senha -->
+      <form class="formulario" id="form-recuperar" novalidate hidden>
+        <p class="app-aviso-passo">Informe seu email — se houver uma conta, enviamos um link para redefinir a senha.</p>
+        <div class="formulario__campo">
+          <label for="recuperar-email">Email</label>
+          <input type="email" id="recuperar-email" autocomplete="email" placeholder="seuemail@exemplo.com" required>
+        </div>
+        <button class="botao botao--primario botao--bloco" type="submit">
+          <span class="botao__rotulo">Enviar link de redefinição</span>
+          <span class="botao__carregando" aria-hidden="true"></span>
+        </button>
+        <button class="link-sutil" type="button" id="link-voltar-entrar">Voltar para entrar</button>
+      </form>
+
+      <p class="app-erro" id="erro-auth" role="alert" hidden></p>
+      <p class="app-info" id="info-auth" role="status" hidden></p>
+
+      <p class="auth__alternativa" id="voltar-visitante-area" hidden>
+        Não quer criar conta?
+        <button class="link-sutil" type="button" id="link-sem-conta">Agendar só com nome e telefone</button>
+      </p>
+    </section>
+  </main>
+
+  <footer class="app-rodape">
+    <p>© <span id="ano-atual">2026</span> Barber Daniel's · Rua das Tesouras, 250 — São Paulo</p>
+  </footer>
+
+  <!-- Modal de confirmação (substitui o pop-up nativo do navegador) -->
+  <div class="modal" id="modal-confirma" hidden>
+    <div class="modal__fundo" data-fechar-modal></div>
+    <div class="modal__caixa vidro" role="dialog" aria-modal="true" aria-labelledby="modal-titulo" aria-describedby="modal-texto">
+      <span class="modal__icone" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <path d="M12 9v4M12 17h.01"/>
+        </svg>
+      </span>
+      <h2 class="modal__titulo" id="modal-titulo" tabindex="-1">Cancelar agendamento?</h2>
+      <p class="modal__texto" id="modal-texto"></p>
+      <div class="modal__acoes">
+        <button class="botao botao--fantasma" type="button" id="modal-voltar" data-fechar-modal>Voltar</button>
+        <button class="botao botao--perigo" type="button" id="modal-confirmar">Sim, cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SDK do Supabase + scripts da página -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/agendar.js?v=6"></script>
+</body>
+</html>
