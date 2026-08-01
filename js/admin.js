@@ -20,6 +20,9 @@ const AuthAdmin = {
   async init() {
     $('#form-entrar').addEventListener('submit', (e) => this.entrar(e));
     $('#botao-sair').addEventListener('click', () => sb.auth.signOut());
+    $('#link-esqueci-senha').addEventListener('click', () => this.mostrarRecuperar());
+    $('#link-voltar-entrar').addEventListener('click', () => this.mostrarLogin());
+    $('#form-recuperar').addEventListener('submit', (e) => this.recuperarSenha(e));
 
     sb.auth.onAuthStateChange((_evento, sessao) => {
       Estado.sessao = sessao;
@@ -50,6 +53,45 @@ const AuthAdmin = {
       $('#erro-auth').textContent = 'Email ou senha incorretos.';
       $('#erro-auth').hidden = false;
     }
+  },
+
+  mostrarLogin() {
+    $('#form-entrar').hidden = false;
+    $('#form-recuperar').hidden = true;
+    $('#erro-auth').hidden = true;
+    $('#info-auth').hidden = true;
+  },
+
+  mostrarRecuperar() {
+    $('#form-entrar').hidden = true;
+    $('#form-recuperar').hidden = false;
+    $('#erro-auth').hidden = true;
+    $('#info-auth').hidden = true;
+  },
+
+  async recuperarSenha(evento) {
+    evento.preventDefault();
+    const botao = $('button[type="submit"]', evento.target);
+    botao.classList.add('carregando');
+    botao.disabled = true;
+
+    const { error } = await sb.auth.resetPasswordForEmail($('#recuperar-email').value.trim(), {
+      redirectTo: `${window.location.origin}/redefinir-senha.html`,
+    });
+
+    botao.classList.remove('carregando');
+    botao.disabled = false;
+
+    // Mensagem genérica sempre — não revela se o email tem conta ou não
+    const info = $('#info-auth');
+    if (error && error.status !== 429) {
+      $('#erro-auth').textContent = 'Não foi possível enviar o link agora. Tente novamente em instantes.';
+      $('#erro-auth').hidden = false;
+      return;
+    }
+    info.textContent = 'Se esse email tiver uma conta, enviamos um link para redefinir a senha.';
+    info.hidden = false;
+    evento.target.reset();
   },
 
   /** Decide qual tela mostrar: login, painel ou "sem acesso" */

@@ -66,8 +66,24 @@
           <span class="botao__rotulo">Entrar no painel</span>
           <span class="botao__carregando" aria-hidden="true"></span>
         </button>
+        <button class="link-sutil" type="button" id="link-esqueci-senha">Esqueci minha senha</button>
       </form>
+
+      <form class="formulario" id="form-recuperar" novalidate hidden>
+        <p class="app-aviso-passo">Informe seu email — se houver uma conta, enviamos um link para redefinir a senha.</p>
+        <div class="formulario__campo">
+          <label for="recuperar-email">Email</label>
+          <input type="email" id="recuperar-email" autocomplete="email" placeholder="seuemail@exemplo.com" required>
+        </div>
+        <button class="botao botao--primario botao--bloco" type="submit">
+          <span class="botao__rotulo">Enviar link de redefinição</span>
+          <span class="botao__carregando" aria-hidden="true"></span>
+        </button>
+        <button class="link-sutil" type="button" id="link-voltar-entrar">Voltar para entrar</button>
+      </form>
+
       <p class="app-erro" id="erro-auth" role="alert" hidden></p>
+      <p class="app-info" id="info-auth" role="status" hidden></p>
     </section>
 
     <!-- ============ PAINEL (visível só para admin) ============ -->
