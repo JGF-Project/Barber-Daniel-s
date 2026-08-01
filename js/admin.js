@@ -933,9 +933,113 @@ const Ausencias = {
    corrente e apura o faturamento — medido SÓ pelos concluídos.
 ============================================================ */
 const Relatorios = {
+  mesCalendario: null, // Date (UTC, dia 1) do mês exibido no seletor de período
+  rangeInicio: null,   // ymd do início do período personalizado
+  rangeFim: null,      // ymd do fim do período personalizado
+
   init() {
     $('#relatorios-atualizar')?.addEventListener('click', () => this.carregar());
     $('#relatorios-barbeiro')?.addEventListener('change', () => this.carregar());
+    this.montarCalendario();
+  },
+
+  formatarData(ymd) {
+    const [a, m, d] = ymd.split('-').map(Number);
+    return new Date(Date.UTC(a, m - 1, d)).toLocaleDateString('pt-BR', { timeZone: 'UTC', day: '2-digit', month: 'short' });
+  },
+
+  /** Renderiza o calendário de escolha de período: 1º clique marca o início, 2º marca o fim */
+  montarCalendario() {
+    const area = $('#relatorios-calendario');
+    if (!area) return;
+
+    const hojeYmd = partesNoFuso(new Date()).ymd;
+    const [hAno, hMes] = hojeYmd.split('-').map(Number);
+    if (!this.mesCalendario) this.mesCalendario = new Date(Date.UTC(hAno, hMes - 1, 1));
+    const ano = this.mesCalendario.getUTCFullYear();
+    const mes = this.mesCalendario.getUTCMonth();
+
+    const chaveMes = (a, m) => `${a}-${String(m + 1).padStart(2, '0')}`;
+    const podeAvancar = chaveMes(ano, mes) < hojeYmd.slice(0, 7); // sem relatório do futuro
+
+    const primeiro = new Date(Date.UTC(ano, mes, 1));
+    const lead = (primeiro.getUTCDay() + 6) % 7; // 0=seg … 6=dom
+    const inicioGrade = new Date(Date.UTC(ano, mes, 1 - lead));
+    const semana = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+
+    let celulas = '';
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(inicioGrade.getTime() + i * 86400000);
+      const cm = d.getUTCMonth();
+      const ymd = `${d.getUTCFullYear()}-${String(cm + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      const futuro = ymd > hojeYmd;
+      const noIntervalo = this.rangeInicio && this.rangeFim && ymd > this.rangeInicio && ymd < this.rangeFim;
+      const extremo = ymd === this.rangeInicio || ymd === this.rangeFim;
+
+      const cls = ['dia-cel'];
+      if (cm !== mes) cls.push('dia-cel--fora');
+      if (futuro) cls.push('dia-cel--fechado');
+      else cls.push('dia-cel--livre');
+      if (ymd === hojeYmd) cls.push('dia-cel--hoje');
+      if (noIntervalo) cls.push('dia-cel--intervalo');
+      if (extremo) cls.push('dia-cel--escolhido');
+
+      const attrs = futuro ? 'disabled' : `data-ymd="${ymd}"`;
+      celulas += `<button type="button" class="${cls.join(' ')}" ${attrs}>${d.getUTCDate()}</button>`;
+    }
+
+    const rotulo = this.rangeInicio
+      ? (this.rangeFim ? `${this.formatarData(this.rangeInicio)} — ${this.formatarData(this.rangeFim)}` : `${this.formatarData(this.rangeInicio)} — escolha o dia final`)
+      : 'Selecione o dia inicial e o dia final do período.';
+
+    area.innerHTML = `
+      <p class="app-aviso-passo">${rotulo}</p>
+      <div class="calendario__topo">
+        <span class="calendario__mes">${primeiro.toLocaleDateString('pt-BR', { timeZone: 'UTC', month: 'long', year: 'numeric' })}</span>
+        <div class="calendario__nav">
+          <button type="button" class="calendario__seta" data-nav="-1" aria-label="Mês anterior">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button type="button" class="calendario__seta" data-nav="1" aria-label="Próximo mês" ${podeAvancar ? '' : 'disabled'}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="calendario__semana">${semana.map((s) => `<span>${s}</span>`).join('')}</div>
+      <div class="calendario__grade">${celulas}</div>
+      ${this.rangeInicio ? '<button class="link-sutil" type="button" id="relatorios-periodo-limpar">Voltar para o mês atual</button>' : ''}`;
+
+    $$('.calendario__seta', area).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (btn.disabled) return;
+        this.mesCalendario = new Date(Date.UTC(ano, mes + Number(btn.dataset.nav), 1));
+        this.montarCalendario();
+      });
+    });
+
+    $$('.dia-cel--livre', area).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const ymd = btn.dataset.ymd;
+        if (!this.rangeInicio || this.rangeFim) {
+          this.rangeInicio = ymd;
+          this.rangeFim = null;
+        } else if (ymd < this.rangeInicio) {
+          this.rangeFim = this.rangeInicio;
+          this.rangeInicio = ymd;
+        } else {
+          this.rangeFim = ymd;
+        }
+        this.montarCalendario();
+        if (this.rangeInicio && this.rangeFim) this.carregar();
+      });
+    });
+
+    $('#relatorios-periodo-limpar')?.addEventListener('click', () => {
+      this.rangeInicio = null;
+      this.rangeFim = null;
+      this.montarCalendario();
+      this.carregar();
+    });
   },
 
   /** Preenche o seletor: "Todos os barbeiros" + cada barbeiro. Chamado por Barbeiros.carregar() */
@@ -1003,14 +1107,18 @@ const Relatorios = {
     const area = $('#relatorios-conteudo');
     area.innerHTML = '<p class="app-carregando">Carregando relatórios…</p>';
 
-    const { inicio, fim } = this.intervaloMes();
-    $('#relatorios-mes').textContent = inicio.toLocaleDateString('pt-BR', {
-      timeZone: FUSO, month: 'long', year: 'numeric',
-    });
-
-    // Mesmo trecho do mês anterior (comparação justa: até o mesmo ponto do mês)
-    const prevInicio = this.inicioMesAnterior();
-    const prevFim = new Date(prevInicio.getTime() + (Date.now() - inicio.getTime()));
+    // Período personalizado (calendário) tem prioridade sobre o mês corrente.
+    const comPeriodo = Boolean(this.rangeInicio && this.rangeFim);
+    let inicio, fim, rotulo;
+    if (comPeriodo) {
+      inicio = new Date(`${this.rangeInicio}T00:00:00${OFFSET}`);
+      fim = new Date(new Date(`${this.rangeFim}T00:00:00${OFFSET}`).getTime() + 86400000);
+      rotulo = `${this.formatarData(this.rangeInicio)} a ${this.formatarData(this.rangeFim)}`;
+    } else {
+      ({ inicio, fim } = this.intervaloMes());
+      rotulo = inicio.toLocaleDateString('pt-BR', { timeZone: FUSO, month: 'long', year: 'numeric' });
+    }
+    $('#relatorios-mes').textContent = rotulo;
 
     const barbeiroId = $('#relatorios-barbeiro')?.value;
     const consulta = (de, ate, campos) => {
@@ -1021,9 +1129,16 @@ const Relatorios = {
       return q;
     };
 
+    // Comparação com "mesmo trecho do mês anterior" só faz sentido no modo mês corrente.
+    const buscaAnterior = comPeriodo ? Promise.resolve({ data: [] }) : (() => {
+      const prevInicio = this.inicioMesAnterior();
+      const prevFim = new Date(prevInicio.getTime() + (Date.now() - inicio.getTime()));
+      return consulta(prevInicio, prevFim, 'status, agendamento_servicos(servicos(preco_centavos))');
+    })();
+
     const [atual, anterior] = await Promise.all([
       consulta(inicio, fim, 'status, inicio, agendamento_servicos(servicos(nome, preco_centavos))'),
-      consulta(prevInicio, prevFim, 'status, agendamento_servicos(servicos(preco_centavos))'),
+      buscaAnterior,
     ]);
 
     if (atual.error || anterior.error) {
@@ -1046,12 +1161,13 @@ const Relatorios = {
     const servicosVendidos = ativos.flatMap((a) => servicosResumo(a).itens);
 
     area.innerHTML = this.render({
+      comPeriodo,
       concluidos: concluidos.length,
       agendados: data.filter((a) => a.status === 'confirmado').length,
       cancelados: data.filter((a) => a.status === 'cancelado').length,
       faturamento,
-      varFaturamento: this.variacao(faturamento, prevFaturamento),
-      varCortes: this.variacao(concluidos.length, prevConcluidos.length),
+      varFaturamento: comPeriodo ? null : this.variacao(faturamento, prevFaturamento),
+      varCortes: comPeriodo ? null : this.variacao(concluidos.length, prevConcluidos.length),
       servicoTop: this.top(servicosVendidos, (s) => s.nome),
       diaTop: this.top(ativos, (a) => partesNoFuso(new Date(a.inicio)).diaSemana),
       horaTop: this.top(ativos, (a) => this.horaNoFuso(a.inicio)),
@@ -1090,15 +1206,16 @@ const Relatorios = {
 
       <div class="rel-financeiro vidro">
         <div class="rel-financeiro__topo">
-          <span class="rel-financeiro__rotulo">Faturamento do mês</span>
+          <span class="rel-financeiro__rotulo">Faturamento ${m.comPeriodo ? 'do período' : 'do mês'}</span>
           <span class="rel-financeiro__nota">Somente cortes concluídos</span>
         </div>
         <strong class="rel-financeiro__valor">${formatarPreco(m.faturamento)}</strong>
+        ${m.comPeriodo ? '' : `
         <p class="rel-comparacao">
           <span class="rel-variacao rel-variacao--${m.varFaturamento.cls}">Faturamento: ${m.varFaturamento.txt}</span>
           <span class="rel-variacao rel-variacao--${m.varCortes.cls}">Cortes: ${m.varCortes.txt}</span>
           <small>Compara até o mesmo dia do mês anterior, não o mês inteiro</small>
-        </p>
+        </p>`}
         <div class="rel-financeiro__extra">
           <div>
             <span>Atendimentos pagos</span>

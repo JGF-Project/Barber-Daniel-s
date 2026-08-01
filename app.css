@@ -356,6 +356,13 @@
   background: var(--cor-dourado);
 }
 
+/* Dias entre o início e o fim do período selecionado (relatórios) */
+.dia-cel--intervalo {
+  background: rgba(200, 162, 74, 0.18);
+  color: var(--cor-branco);
+  border-radius: 4px;
+}
+
 /* Passo 3: grade de horários */
 .opcoes-horario {
   display: flex;
