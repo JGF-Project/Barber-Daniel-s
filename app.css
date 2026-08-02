@@ -891,6 +891,7 @@
 .novo-servico {
   padding: var(--espaco-3);
   margin-top: var(--espaco-3);
+  margin-bottom: var(--espaco-3);
 }
 
 .novo-servico summary {
