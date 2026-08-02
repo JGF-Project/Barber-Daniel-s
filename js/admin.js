@@ -1340,12 +1340,16 @@ function estilizarSelect(select) {
   lista.setAttribute('role', 'listbox');
   lista.hidden = true;
 
-  wrap.append(botao, lista);
+  wrap.append(botao);
+  // A lista vai direto no <body>, não dentro do wrap: um ancestral com
+  // backdrop-filter (.vidro, usado nos formulários) vira o "containing
+  // block" de todo position:fixed dentro dele, então top/left calculados
+  // para a viewport saem errados se a lista ficar presa ali dentro.
+  document.body.appendChild(lista);
 
   const fechar = () => { lista.hidden = true; botao.classList.remove('aberto'); botao.setAttribute('aria-expanded', 'false'); };
   const abrir = () => {
-    // position:fixed é posicionado na viewport, não no wrap — recalcula a cada abertura
-    // (a página pode ter rolado ou o layout mudado desde a última vez).
+    // Recalcula a cada abertura — a página pode ter rolado ou o layout mudado.
     const r = botao.getBoundingClientRect();
     lista.style.top = `${r.bottom + 6}px`;
     lista.style.left = `${r.left}px`;
@@ -1376,7 +1380,7 @@ function estilizarSelect(select) {
   }
 
   botao.addEventListener('click', () => (lista.hidden ? abrir() : fechar()));
-  document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) fechar(); });
+  document.addEventListener('click', (e) => { if (!wrap.contains(e.target) && !lista.contains(e.target)) fechar(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fechar(); });
 
   // As options são preenchidas dinamicamente (popularSeletor) — re-renderiza sozinho
