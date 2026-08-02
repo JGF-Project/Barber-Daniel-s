@@ -821,12 +821,19 @@ const Agendamento = {
     const el = $('#erro-agendar');
     const conflito = error.code === '23P01';
     const doPlano = /visita|plano|segunda a sexta/i.test(error.message || '');
+    // 42501/22023 são os códigos que a RPC usa para TODAS as suas próprias
+    // validações (conta de outra barbearia, horário fora do expediente, etc.)
+    // — a mensagem já vem pronta e específica; só o erro realmente inesperado
+    // (rede, bug) cai no texto genérico.
+    const erroConhecido = error.code === '42501' || error.code === '22023';
 
     el.textContent = conflito
       ? 'Esse horário acabou de ficar indisponível. Escolha outro, por favor.'
       : doPlano
         ? `${error.message} Você ainda pode agendar pelos serviços avulsos.`
-        : 'Não foi possível concluir o agendamento. Tente novamente.';
+        : erroConhecido
+          ? error.message
+          : 'Não foi possível concluir o agendamento. Tente novamente.';
     el.hidden = false;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     if (conflito) this.montarSlots();
@@ -964,9 +971,14 @@ const MeusAgendamentos = {
 
     area.innerHTML = '<p class="app-carregando">Carregando…</p>';
 
+    // cliente_id explícito é essencial aqui: a policy de leitura também libera
+    // admins a ver TODOS os agendamentos da barbearia (para a Agenda do painel).
+    // Sem esse filtro, uma conta que é admin via admins_barbearia enxergaria os
+    // agendamentos de outros clientes nesta tela de "Meus agendamentos".
     const { data, error } = await sb
       .from('agendamentos')
       .select('id, inicio, fim, status, via_assinatura, agendamento_servicos(servicos(nome, preco_centavos))')
+      .eq('cliente_id', Estado.sessao.user.id)
       .order('inicio', { ascending: false })
       .limit(50);
 
