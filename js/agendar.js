@@ -979,6 +979,7 @@ const MeusAgendamentos = {
       .from('agendamentos')
       .select('id, inicio, fim, status, via_assinatura, agendamento_servicos(servicos(nome, preco_centavos))')
       .eq('cliente_id', Estado.sessao.user.id)
+      .eq('barbearia_id', BARBEARIA_ID)
       .order('inicio', { ascending: false })
       .limit(50);
 
