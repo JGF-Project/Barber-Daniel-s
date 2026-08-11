@@ -92,6 +92,31 @@ const avisar = (titulo, texto) => abrirModal({ titulo, texto, confirmarLabel: 'E
    só a entrega para o dono do plano).
 ============================================================ */
 const Assinatura = {
+  /** Marca automaticamente agendamentos de assinatura confirmados que passaram 1h como "concluído" */
+  async marcarAtrasados() {
+    if (!Estado.sessao) return;
+    const agora = Date.now();
+    const { data: agendamentos } = await sb
+      .from('agendamentos')
+      .select('id, inicio, status, via_assinatura')
+      .eq('cliente_id', Estado.sessao.user.id)
+      .eq('barbearia_id', BARBEARIA_ID)
+      .eq('status', 'confirmado')
+      .eq('via_assinatura', true);
+
+    if (!agendamentos) return;
+    const atrasados = agendamentos.filter(a => {
+      const inicioMs = new Date(a.inicio).getTime();
+      return inicioMs + 60 * 60 * 1000 < agora; // passou 1h do horário
+    });
+
+    if (atrasados.length) {
+      await Promise.all(atrasados.map(a =>
+        sb.from('agendamentos').update({ status: 'concluido' }).eq('id', a.id)
+      ));
+    }
+  },
+
   /** Recarrega o plano e a cota. p_inicio = mês/semana que interessa consultar. */
   async carregar(inicio = null) {
     if (!Estado.sessao) {
@@ -99,6 +124,7 @@ const Assinatura = {
       this.aplicar();
       return;
     }
+    await this.marcarAtrasados(); // marca automaticamente antes de recarregar cota
     const args = inicio ? { p_inicio: inicio.toISOString() } : {};
     const { data } = await sb.rpc('minha_assinatura', args);
     Estado.assinatura = data?.[0] || null;
@@ -1014,10 +1040,10 @@ const MeusAgendamentos = {
       .map((a) => {
         const inicioMs = new Date(a.inicio).getTime();
         const futuro = inicioMs > agora;
-        // Regulamento: cancelamento de assinatura só vale com 24h de antecedência.
-        // Abaixo disso conta como falta. A policy no banco recusa de qualquer jeito.
-        const travadoPor24h = a.via_assinatura && inicioMs - agora <= 24 * 60 * 60 * 1000;
-        const podeCancelar = a.status === 'confirmado' && futuro && !travadoPor24h;
+        // ponytail: cancelamento de assinatura só vale com 1h de antecedência.
+        // Abaixo disso conta como concluído. A policy no banco recusa de qualquer jeito.
+        const travadoPor1h = a.via_assinatura && inicioMs - agora <= 60 * 60 * 1000;
+        const podeCancelar = a.status === 'confirmado' && futuro && !travadoPor1h;
         const podeApagar = podeApagarItem(a);
         const serv = servicosResumo(a);
         const valor = a.via_assinatura ? 'Pelo seu plano' : formatarPreco(serv.total);
@@ -1026,8 +1052,8 @@ const MeusAgendamentos = {
           <div class="cartao-agendamento__info">
             <strong>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Agendamento da assinatura">♛</span> ' : ''}${escaparHtml(serv.nomes)}</strong>
             <span>${formatarDataHora(a.inicio)} · ${valor}</span>
-            ${a.status === 'confirmado' && futuro && travadoPor24h
-              ? '<small class="cartao-agendamento__nota">Faltam menos de 24h — para cancelar, ligue para a barbearia.</small>'
+            ${a.status === 'confirmado' && futuro && travadoPor1h
+              ? '<small class="cartao-agendamento__nota">Faltam menos de 1h — cancelamento não é mais possível. Este agendamento será contabilizado.</small>'
               : ''}
           </div>
           <div class="cartao-agendamento__acoes">
@@ -1060,10 +1086,10 @@ const MeusAgendamentos = {
 
         if (erroCancelar) {
           botao.disabled = false;
-          await avisar('Ops!', 'Não foi possível cancelar. Se faltam menos de 24h para um horário do seu plano, ligue para a barbearia.');
+          await avisar('Ops!', 'Não foi possível cancelar. Se faltam menos de 1h para o horário, não é mais possível cancelar.');
           return;
         }
-        await Assinatura.carregar(); // cancelar com 24h+ devolve a visita
+        await Assinatura.carregar(); // cancelar com 1h+ devolve a visita
         this.carregar();
       });
     });
