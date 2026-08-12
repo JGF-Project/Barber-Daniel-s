@@ -162,39 +162,30 @@ const Assinatura = {
     return `Restam <strong>${a.restantes} de 4</strong> este mês · 1 por semana · seg a sex`;
   },
 
-  /** Cota de pezinhos (mesmo que cortes, mas campo separado) */
+  /** Cota de pezinhos — independente da cota de cortes */
   textoQuotaPezinhos() {
     const a = Estado.assinatura;
     if (!a) return '';
-    // ponytail: reutiliza mesma lógica de cortes, assumindo campos pezinhos_restantes/pezinhos_usado_semana
-    // Se o banco não tiver, mostra padrão
-    const restantes = a.pezinhos_restantes ?? a.restantes;
-    const usadoSemana = a.pezinhos_usado_semana ?? a.usado_semana;
-    if (restantes <= 0) {
+    if (a.pezinhos_restantes <= 0) {
       return 'Você já usou os <strong>4 pezinhos deste mês</strong>. A cota volta no mês que vem.';
     }
-    if (usadoSemana) {
-      return `Restam <strong>${restantes} de 4</strong> este mês, mas o pezinho <strong>desta semana</strong> já foi usado.`;
+    if (a.pezinhos_usado_semana) {
+      return `Restam <strong>${a.pezinhos_restantes} de 4</strong> este mês, mas o pezinho <strong>desta semana</strong> já foi usado.`;
     }
-    return `Restam <strong>${restantes} de 4</strong> este mês · 1 por semana · seg a sex`;
+    return `Restam <strong>${a.pezinhos_restantes} de 4</strong> este mês · 1 por semana · seg a sex`;
   },
 
-  /** Pode agendar pelo plano no horário/dia escolhido? */
-  bloqueio() {
+  /** Pode agendar pelo plano da categoria informada ('corte' ou 'pezinho')? Cada uma tem cota própria. */
+  bloqueio(categoria = 'corte') {
     const a = Estado.assinatura;
     if (!a) return 'Plano indisponível.';
 
-    // Se escolheu Pezinhos
-    const escolheuPezinhos = Estado.servicosEscolhidos.some((s) => s.nome === 'Pezinhos');
-    if (escolheuPezinhos) {
-      const pezRest = a.pezinhos_restantes ?? a.restantes;
-      const pezUsado = a.pezinhos_usado_semana ?? a.usado_semana;
-      if (pezRest <= 0) return 'Você já usou os 4 pezinhos deste mês.';
-      if (pezUsado) return 'Você já usou seu pezinho desta semana.';
+    if (categoria === 'pezinho') {
+      if (a.pezinhos_restantes <= 0) return 'Você já usou os 4 pezinhos deste mês.';
+      if (a.pezinhos_usado_semana) return 'Você já usou seu pezinho desta semana.';
       return null;
     }
 
-    // Se escolheu Corte/plano normal
     if (a.restantes <= 0) return 'Você já usou as 4 visitas deste mês.';
     if (a.usado_semana) return 'Você já usou sua visita desta semana.';
     return null;
@@ -458,10 +449,11 @@ const Agendamento = {
   async carregarServicos() {
     const { data, error } = await sb
       .from('servicos')
-      .select('id, nome, descricao, preco_centavos, duracao_min, assinatura')
+      .select('id, nome, descricao, preco_centavos, duracao_min, assinatura, categoria_assinatura')
       .eq('ativo', true)
       .eq('barbearia_id', BARBEARIA_ID)
-      .order('assinatura', { ascending: false })  // plano primeiro
+      .order('assinatura', { ascending: false })       // plano primeiro
+      .order('categoria_assinatura', { ascending: true }) // 'corte' antes de 'pezinho'
       .order('preco_centavos');
 
     const area = $('#lista-servicos');
@@ -471,18 +463,20 @@ const Agendamento = {
     }
 
     // A RLS libera as linhas de plano também para o admin (ele precisa vê-las
-    // na aba Assinantes). Na tela de agendar, só o dono do plano pode ver a
-    // própria linha — qualquer outra linha de plano fica de fora daqui.
+    // na aba Assinantes). Na tela de agendar, só o dono do plano de corte pode
+    // ver a própria linha de corte — o pezinho é liberado junto por ser bônus
+    // incluso em qualquer plano (eh_meu_plano() já garante isso no banco).
     const meuPlanoId = Estado.assinatura?.servico_id;
-    const visiveis = data.filter((s) => !s.assinatura || s.id === meuPlanoId);
+    const visiveis = data.filter((s) => !s.assinatura || s.id === meuPlanoId || s.categoria_assinatura === 'pezinho');
 
     Estado.servicos = visiveis;
     // Um serviço que sumiu da lista (ex.: perdeu o plano ao sair da conta)
     // não pode continuar selecionado no estado.
     Estado.servicosEscolhidos = Estado.servicosEscolhidos.filter((e) => visiveis.some((s) => s.id === e.id));
 
-    const bloqueio = Assinatura.bloqueio();
-    area.innerHTML = visiveis.map((s) => this.cartaoServico(s, bloqueio)).join('');
+    area.innerHTML = visiveis
+      .map((s) => this.cartaoServico(s, s.assinatura ? Assinatura.bloqueio(s.categoria_assinatura) : null))
+      .join('');
 
     $$('.opcao-servico', area).forEach((botao) => {
       // Marca o que já estava escolhido (a lista é re-renderizada em login/logout)
@@ -498,21 +492,12 @@ const Agendamento = {
         if (i >= 0) {
           Estado.servicosEscolhidos.splice(i, 1); // desmarca
         } else if (s.assinatura) {
-          // ponytail: permite dois planos de assinatura (Cortes + Pezinhos)
-          const jaTemPlano = Estado.servicosEscolhidos.some((x) => x.assinatura);
-          if (jaTemPlano && s.nome !== 'Pezinhos' && !Estado.servicosEscolhidos.some((x) => x.nome === 'Pezinhos')) {
-            // Trocar de plano (não é Pezinhos)
-            Estado.servicosEscolhidos = Estado.servicosEscolhidos.filter((x) => x.nome === 'Pezinhos');
-            Estado.servicosEscolhidos.push(s);
-          } else if (jaTemPlano && s.nome === 'Pezinhos' && !Estado.servicosEscolhidos.some((x) => x.nome === 'Pezinhos')) {
-            // Adicionar Pezinhos ao lado do plano existente
-            Estado.servicosEscolhidos.push(s);
-          } else if (!jaTemPlano) {
-            // Primeiro plano
-            Estado.servicosEscolhidos.push(s);
-          }
+          // O RPC recusa combinar plano com qualquer outro serviço na mesma
+          // reserva — corte e pezinho têm cotas independentes, mas cada um
+          // é um agendamento (horário) separado. Escolher um plano vai sozinho.
+          Estado.servicosEscolhidos = [s];
         } else {
-          // Escolher um avulso abandona o plano, pelo mesmo motivo.
+          // Escolher um avulso abandona qualquer plano, pelo mesmo motivo.
           Estado.servicosEscolhidos = Estado.servicosEscolhidos.filter((x) => !x.assinatura);
           Estado.servicosEscolhidos.push(s);
         }
@@ -556,7 +541,7 @@ const Agendamento = {
         </span>
         <span class="opcao-servico__descricao">${escaparHtml(s.descricao || '')}</span>
         <span class="opcao-servico__cota${travado ? ' opcao-servico__cota--travado' : ''}">
-          ${travado ? escaparHtml(bloqueio) : Assinatura.textoCota()}
+          ${travado ? escaparHtml(bloqueio) : (s.categoria_assinatura === 'pezinho' ? Assinatura.textoQuotaPezinhos() : Assinatura.textoCota())}
         </span>
         <span class="opcao-servico__base">
           <strong>${travado ? 'Indisponível' : 'Incluso no plano'}</strong>
