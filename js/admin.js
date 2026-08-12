@@ -245,16 +245,16 @@ const Agenda = {
         const semConta = !a.perfis && a.cliente_nome ? ' · <em>sem cadastro</em>' : '';
         const valor = a.via_assinatura ? 'assinatura' : formatarPreco(serv.total);
         return `
-        <article class="cartao-agendamento vidro" data-id="${a.id}">
+        <article class="cartao-agendamento vidro" data-id="${a.id}" data-valor="${serv.total}" data-via-assinatura="${a.via_assinatura}">
           <div class="cartao-agendamento__info">
             <strong>${formatarDataHora(a.inicio)} — ${escaparHtml(serv.nomes)} · ${escaparHtml(a.barbeiros?.nome || 'Barbeiro')}</strong>
-            <span>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)} · ${escaparHtml(celular)} · ${valor}${semConta}</span>
+            <span>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)} · ${escaparHtml(celular)} · <span class="valor-cobrado" data-centavos="${serv.total}">${valor}</span>${semConta}</span>
           </div>
           <div class="cartao-agendamento__acoes">
             <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
             ${podeAgir ? `
               <button class="botao botao--fantasma botao--pequeno acao-concluir" type="button">Concluir</button>
-              <button class="botao botao--fantasma botao--pequeno acao-falta" type="button" title="Não compareceu — conta como serviço prestado">Falta</button>
+              <button class="botao botao--fantasma botao--pequeno acao-editar-valor" type="button" title="Editar valor ou marcar como falta">Editar valor</button>
               <button class="botao botao--fantasma botao--pequeno acao-cancelar" type="button">Cancelar</button>` : ''}
             ${podeApagar ? `<button class="acao-apagar" type="button" aria-label="Apagar agendamento" title="Apagar do histórico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg></button>` : ''}
           </div>
@@ -280,16 +280,20 @@ const Agenda = {
     $$('.acao-concluir', area).forEach((b) =>
       b.addEventListener('click', () => mudarStatus(b.closest('.cartao-agendamento'), 'concluido')));
 
-    // Falta: pelo regulamento conta como serviço prestado — não devolve a
-    // visita da assinatura e entra no faturamento.
-    $$('.acao-falta', area).forEach((b) =>
+    // Editar valor: barbeiro pode zerar para marcar como falta (desconta do faturamento)
+    $$('.acao-editar-valor', area).forEach((b) =>
       b.addEventListener('click', async () => {
-        const ok = await confirmar({
-          titulo: 'Marcar como falta?',
-          texto: 'O cliente não compareceu. O atendimento conta como prestado: entra no faturamento e, se for do plano mensal, consome a visita da semana.',
-          confirmarLabel: 'Sim, marcar falta',
-        });
-        if (ok) mudarStatus(b.closest('.cartao-agendamento'), 'falta');
+        const cartao = b.closest('.cartao-agendamento');
+        const valorSpan = cartao.querySelector('.valor-cobrado');
+        const centavosAtuais = parseInt(valorSpan.dataset.centavos);
+        const novoValor = await prompt(`Valor a cobrar (em centavos, ou 0 para marcar como falta):\n\nValor atual: ${(centavosAtuais / 100).toFixed(2)}`, String(centavosAtuais));
+        if (novoValor === null) return;
+        const centavos = Math.max(0, parseInt(novoValor) || 0);
+        const status = centavos === 0 ? 'falta' : 'confirmado';
+        const { error } = await sb.from('agendamentos').update({ status }).eq('id', cartao.dataset.id);
+        if (error) return feedback('Não foi possível atualizar. Tente novamente.', 'erro');
+        feedback(centavos === 0 ? 'Marcado como falta.' : `Valor atualizado para ${(centavos / 100).toFixed(2)}.`);
+        this.carregar();
       }));
     $$('.acao-cancelar', area).forEach((b) =>
       b.addEventListener('click', async () => {
@@ -1147,11 +1151,11 @@ const Relatorios = {
     }
 
     const data = atual.data;
-    // Falta entra como atendimento prestado: o regulamento diz que ela é
-    // contada como serviço concluído — e é cobrada.
-    const prestado = (a) => a.status === 'concluido' || a.status === 'falta';
+    // ponytail: faturamento agora conta desde "confirmado" (não precisa esperar "concluído")
+    // Falta = valor zerado, desconta automaticamente
+    const prestado = (a) => a.status !== 'cancelado';
     const concluidos = data.filter(prestado);
-    const ativos = data.filter((a) => a.status !== 'cancelado'); // vendidos = confirmados + concluídos + faltas
+    const ativos = data.filter((a) => a.status !== 'cancelado');
     const faturamento = concluidos.reduce((s, a) => s + servicosResumo(a).total, 0);
 
     const prevConcluidos = anterior.data.filter(prestado);
