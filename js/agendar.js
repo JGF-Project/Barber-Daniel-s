@@ -146,6 +146,7 @@ const Assinatura = {
     $('#plano-nome').textContent = a.nome;
     $('#plano-descricao').textContent = a.descricao || '';
     $('#plano-cota').innerHTML = this.textoCota();
+    $('#plano-pezinhos-cota').innerHTML = this.textoQuotaPezinhos();
   },
 
   /** Frase da cota, usada na aba e no card do plano */
@@ -161,10 +162,39 @@ const Assinatura = {
     return `Restam <strong>${a.restantes} de 4</strong> este mês · 1 por semana · seg a sex`;
   },
 
+  /** Cota de pezinhos (mesmo que cortes, mas campo separado) */
+  textoQuotaPezinhos() {
+    const a = Estado.assinatura;
+    if (!a) return '';
+    // ponytail: reutiliza mesma lógica de cortes, assumindo campos pezinhos_restantes/pezinhos_usado_semana
+    // Se o banco não tiver, mostra padrão
+    const restantes = a.pezinhos_restantes ?? a.restantes;
+    const usadoSemana = a.pezinhos_usado_semana ?? a.usado_semana;
+    if (restantes <= 0) {
+      return 'Você já usou os <strong>4 pezinhos deste mês</strong>. A cota volta no mês que vem.';
+    }
+    if (usadoSemana) {
+      return `Restam <strong>${restantes} de 4</strong> este mês, mas o pezinho <strong>desta semana</strong> já foi usado.`;
+    }
+    return `Restam <strong>${restantes} de 4</strong> este mês · 1 por semana · seg a sex`;
+  },
+
   /** Pode agendar pelo plano no horário/dia escolhido? */
   bloqueio() {
     const a = Estado.assinatura;
     if (!a) return 'Plano indisponível.';
+
+    // Se escolheu Pezinhos
+    const escolheuPezinhos = Estado.servicosEscolhidos.some((s) => s.nome === 'Pezinhos');
+    if (escolheuPezinhos) {
+      const pezRest = a.pezinhos_restantes ?? a.restantes;
+      const pezUsado = a.pezinhos_usado_semana ?? a.usado_semana;
+      if (pezRest <= 0) return 'Você já usou os 4 pezinhos deste mês.';
+      if (pezUsado) return 'Você já usou seu pezinho desta semana.';
+      return null;
+    }
+
+    // Se escolheu Corte/plano normal
     if (a.restantes <= 0) return 'Você já usou as 4 visitas deste mês.';
     if (a.usado_semana) return 'Você já usou sua visita desta semana.';
     return null;
@@ -468,8 +498,19 @@ const Agendamento = {
         if (i >= 0) {
           Estado.servicosEscolhidos.splice(i, 1); // desmarca
         } else if (s.assinatura) {
-          // O plano vai sozinho: a RPC recusa combinar plano com avulso.
-          Estado.servicosEscolhidos = [s];
+          // ponytail: permite dois planos de assinatura (Cortes + Pezinhos)
+          const jaTemPlano = Estado.servicosEscolhidos.some((x) => x.assinatura);
+          if (jaTemPlano && s.nome !== 'Pezinhos' && !Estado.servicosEscolhidos.some((x) => x.nome === 'Pezinhos')) {
+            // Trocar de plano (não é Pezinhos)
+            Estado.servicosEscolhidos = Estado.servicosEscolhidos.filter((x) => x.nome === 'Pezinhos');
+            Estado.servicosEscolhidos.push(s);
+          } else if (jaTemPlano && s.nome === 'Pezinhos' && !Estado.servicosEscolhidos.some((x) => x.nome === 'Pezinhos')) {
+            // Adicionar Pezinhos ao lado do plano existente
+            Estado.servicosEscolhidos.push(s);
+          } else if (!jaTemPlano) {
+            // Primeiro plano
+            Estado.servicosEscolhidos.push(s);
+          }
         } else {
           // Escolher um avulso abandona o plano, pelo mesmo motivo.
           Estado.servicosEscolhidos = Estado.servicosEscolhidos.filter((x) => !x.assinatura);
@@ -482,10 +523,8 @@ const Agendamento = {
 
         Estado.horarioEscolhido = null;
         this.atualizarTotalServicos();
-        // montarDias() também: o plano não atende sábado/domingo, então
-        // trocar de serviço muda quais dias ficam disponíveis.
         this.montarDias();
-        this.montarSlots();      // duração = soma dos escolhidos
+        this.montarSlots();
         this.atualizarResumo();
       });
     });
