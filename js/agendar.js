@@ -1083,10 +1083,6 @@ const MeusAgendamentos = {
         // Abaixo disso conta como concluído. A policy no banco recusa de qualquer jeito.
         const diferencaMs = inicioMs - agora;
         const travadoPor1h = a.via_assinatura && diferencaMs <= 60 * 60 * 1000;
-        // ponytail: badge temporário de diagnóstico — remover depois de confirmar a causa
-        const debugInfo = a.via_assinatura
-          ? `<small class="cartao-agendamento__nota" style="opacity:.6">DEBUG · inicio bruto: ${a.inicio} · diff: ${Math.round(diferencaMs / 60000)}min</small>`
-          : '';
         const podeCancelar = a.status === 'confirmado' && futuro && !travadoPor1h;
         const podeApagar = podeApagarItem(a);
         const serv = servicosResumo(a);
@@ -1099,7 +1095,6 @@ const MeusAgendamentos = {
             ${a.status === 'confirmado' && futuro && travadoPor1h
               ? '<small class="cartao-agendamento__nota">Faltam menos de 1h — cancelamento não é mais possível. Este agendamento será contabilizado.</small>'
               : ''}
-            ${debugInfo}
           </div>
           <div class="cartao-agendamento__acoes">
             <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
