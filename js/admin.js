@@ -1188,15 +1188,24 @@ const Relatorios = {
     const buscaAnterior = comPeriodo ? Promise.resolve({ data: [] }) : (() => {
       const prevInicio = this.inicioMesAnterior();
       const prevFim = new Date(prevInicio.getTime() + (Date.now() - inicio.getTime()));
-      return consulta(prevInicio, prevFim, 'status, valor_centavos, agendamento_servicos(servicos(preco_centavos))');
+      return consulta(prevInicio, prevFim, 'status, via_assinatura, valor_centavos, agendamento_servicos(servicos(preco_centavos))');
     })();
 
-    const [atual, anterior] = await Promise.all([
-      consulta(inicio, fim, 'status, inicio, valor_centavos, agendamento_servicos(servicos(nome, preco_centavos))'),
+    // A mensalidade é receita do MÊS, não da visita. Só entra na visão de mês
+    // fechado e da barbearia inteira: num recorte de dias ela não caberia, e
+    // por barbeiro não dá para dividir (o assinante é da barbearia, não de um).
+    const comMensalidades = !comPeriodo && !barbeiroId;
+    const buscaAssinantes = comMensalidades
+      ? sb.from('assinaturas').select('servicos(mensalidade_centavos)').eq('barbearia_id', BARBEARIA_ID)
+      : Promise.resolve({ data: [] });
+
+    const [atual, anterior, assinantes] = await Promise.all([
+      consulta(inicio, fim, 'status, inicio, via_assinatura, valor_centavos, agendamento_servicos(servicos(nome, preco_centavos))'),
       buscaAnterior,
+      buscaAssinantes,
     ]);
 
-    if (atual.error || anterior.error) {
+    if (atual.error || anterior.error || assinantes.error) {
       area.innerHTML = '<p class="app-erro">Erro ao carregar os relatórios.</p>';
       return;
     }
@@ -1207,8 +1216,11 @@ const Relatorios = {
     const prestado = (a) => a.status !== 'cancelado';
     const concluidos = data.filter(prestado);
     const ativos = data.filter((a) => a.status !== 'cancelado');
-    // valorCobrado respeita o preço que o barbeiro editou naquele atendimento.
-    const faturamento = concluidos.reduce((s, a) => s + valorCobrado(a), 0);
+    // Só o que foi cobrado no balcão: visita de assinante vale 0 aqui.
+    const faturamentoServicos = concluidos.reduce((s, a) => s + valorCobrado(a), 0);
+    const mensalidades = (assinantes.data || [])
+      .reduce((s, a) => s + (a.servicos?.mensalidade_centavos || 0), 0);
+    const faturamento = faturamentoServicos + mensalidades;
 
     const prevConcluidos = anterior.data.filter(prestado);
     const prevFaturamento = prevConcluidos.reduce((s, a) => s + valorCobrado(a), 0);
@@ -1222,7 +1234,13 @@ const Relatorios = {
       agendados: data.filter((a) => a.status === 'confirmado').length,
       cancelados: data.filter((a) => a.status === 'cancelado').length,
       faturamento,
-      varFaturamento: comPeriodo ? null : this.variacao(faturamento, prevFaturamento),
+      faturamentoServicos,
+      mensalidades,
+      assinantes: (assinantes.data || []).length,
+      comMensalidades,
+      // Compara só serviços: não há histórico de assinantes para comparar
+      // mensalidade de um mês com a do outro.
+      varFaturamento: comPeriodo ? null : this.variacao(faturamentoServicos, prevFaturamento),
       varCortes: comPeriodo ? null : this.variacao(concluidos.length, prevConcluidos.length),
       servicoTop: this.top(servicosVendidos, (s) => s.nome),
       diaTop: this.top(ativos, (a) => partesNoFuso(new Date(a.inicio)).diaSemana),
@@ -1263,18 +1281,29 @@ const Relatorios = {
       <div class="rel-financeiro vidro">
         <div class="rel-financeiro__topo">
           <span class="rel-financeiro__rotulo">Faturamento ${m.comPeriodo ? 'do período' : 'do mês'}</span>
-          <span class="rel-financeiro__nota">Somente cortes concluídos</span>
+          <span class="rel-financeiro__nota">${m.comMensalidades
+            ? 'Serviços do mês + mensalidades'
+            : 'Somente serviços realizados no período'}</span>
         </div>
         <strong class="rel-financeiro__valor">${formatarPreco(m.faturamento)}</strong>
         ${m.comPeriodo ? '' : `
         <p class="rel-comparacao">
-          <span class="rel-variacao rel-variacao--${m.varFaturamento.cls}">Faturamento: ${m.varFaturamento.txt}</span>
+          <span class="rel-variacao rel-variacao--${m.varFaturamento.cls}">Serviços: ${m.varFaturamento.txt}</span>
           <span class="rel-variacao rel-variacao--${m.varCortes.cls}">Cortes: ${m.varCortes.txt}</span>
           <small>Compara até o mesmo dia do mês anterior, não o mês inteiro</small>
         </p>`}
         <div class="rel-financeiro__extra">
           <div>
-            <span>Atendimentos pagos</span>
+            <span>Serviços realizados</span>
+            <strong>${formatarPreco(m.faturamentoServicos)}</strong>
+          </div>
+          ${m.comMensalidades ? `
+          <div>
+            <span>Mensalidades${m.assinantes ? ` · ${m.assinantes} assinante${m.assinantes > 1 ? 's' : ''}` : ''}</span>
+            <strong>${formatarPreco(m.mensalidades)}</strong>
+          </div>` : ''}
+          <div>
+            <span>Atendimentos</span>
             <strong>${m.concluidos}</strong>
           </div>
         </div>

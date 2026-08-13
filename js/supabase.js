@@ -98,11 +98,14 @@ function escaparHtml(texto) {
  * Espera o embed: agendamento_servicos(servicos(nome, preco_centavos)).
  */
 /**
- * Valor realmente cobrado de um agendamento, em centavos.
- * O barbeiro pode editar o preço de um atendimento (valor_centavos);
- * sem edição, vale a soma dos serviços. É esta função que o faturamento usa.
+ * Valor cobrado NO ATENDIMENTO, em centavos.
+ * Visita de assinante vale 0: ela já foi paga na mensalidade, e somar o
+ * preço do plano de novo aqui inflaria o faturamento do dia.
+ * Fora isso vale o preço que o barbeiro editou (valor_centavos) ou, sem
+ * edição, a soma dos serviços.
  */
 function valorCobrado(agendamento) {
+  if (agendamento.via_assinatura) return agendamento.valor_centavos ?? 0;
   return agendamento.valor_centavos ?? servicosResumo(agendamento).total;
 }
 
