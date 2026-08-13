@@ -1064,10 +1064,10 @@ const MeusAgendamentos = {
       .map((a) => {
         const inicioMs = new Date(a.inicio).getTime();
         const futuro = inicioMs > agora;
-        // ponytail: cancelamento de assinatura só vale com 1h de antecedência.
-        // Abaixo disso conta como concluído. A policy no banco recusa de qualquer jeito.
+        // Cancelamento só vale com 1h de antecedência, pra qualquer cliente.
+        // Abaixo disso o agendamento é contabilizado. A policy no banco recusa de qualquer jeito.
         const diferencaMs = inicioMs - agora;
-        const travadoPor1h = a.via_assinatura && diferencaMs <= 60 * 60 * 1000;
+        const travadoPor1h = diferencaMs <= 60 * 60 * 1000;
         const podeCancelar = a.status === 'confirmado' && futuro && !travadoPor1h;
         const podeApagar = podeApagarItem(a);
         const serv = servicosResumo(a);
