@@ -751,6 +751,45 @@
   opacity: 0.85;
 }
 
+/* Editar valor inline */
+.valor-editar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.valor-display {
+  font-weight: 600;
+  color: var(--cor-branco);
+  font-size: 0.9375rem;
+}
+
+.valor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: none;
+  background: rgba(200, 162, 74, 0.14);
+  color: var(--cor-dourado);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(200, 162, 74, 0.2);
+}
+
+.valor-btn:hover {
+  background: rgba(200, 162, 74, 0.22);
+  border-color: rgba(200, 162, 74, 0.4);
+}
+
+.valor-btn:active {
+  transform: scale(0.95);
+}
+
 /* ---------- Agendamento sem conta ---------- */
 .auth__titulo {
   font-family: var(--fonte-titulo);

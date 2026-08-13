@@ -248,13 +248,11 @@ const Agenda = {
         <article class="cartao-agendamento vidro" data-id="${a.id}" data-valor="${serv.total}" data-via-assinatura="${a.via_assinatura}">
           <div class="cartao-agendamento__info">
             <strong>${formatarDataHora(a.inicio)} — ${escaparHtml(serv.nomes)} · ${escaparHtml(a.barbeiros?.nome || 'Barbeiro')}</strong>
-            <span>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)} · ${escaparHtml(celular)} · <span class="valor-cobrado" data-centavos="${serv.total}">${valor}</span>${semConta}</span>
+            <span>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)} · ${escaparHtml(celular)} ${a.via_assinatura ? '<span class="valor-display">incluso</span>' : '<span class="valor-editar" data-centavos="${serv.total}"><span class="valor-display">${valor}</span><button class="valor-btn" type="button" title="Editar ou marcar como falta" aria-label="Editar valor">✏</button></span>'}${semConta}</span>
           </div>
           <div class="cartao-agendamento__acoes">
             <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
             ${podeAgir ? `
-              <button class="botao botao--fantasma botao--pequeno acao-concluir" type="button">Concluir</button>
-              <button class="botao botao--fantasma botao--pequeno acao-editar-valor" type="button" title="Editar valor ou marcar como falta">Editar valor</button>
               <button class="botao botao--fantasma botao--pequeno acao-cancelar" type="button">Cancelar</button>` : ''}
             ${podeApagar ? `<button class="acao-apagar" type="button" aria-label="Apagar agendamento" title="Apagar do histórico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg></button>` : ''}
           </div>
@@ -262,7 +260,27 @@ const Agenda = {
       })
       .join('');
 
-    // Ações de concluir / cancelar
+    // Editar valor inline: clica no ícone ✏ para editar
+    $$('.valor-btn', area).forEach((b) => {
+      b.addEventListener('click', async () => {
+        const span = b.closest('.valor-editar');
+        const centavosAtuais = parseInt(span.dataset.centavos);
+        const novoValor = await prompt(
+          `Valor a cobrar (em centavos, ou 0 para marcar como falta):\n\nValor atual: ${(centavosAtuais / 100).toFixed(2)}`,
+          String(centavosAtuais)
+        );
+        if (novoValor === null) return;
+        const centavos = Math.max(0, parseInt(novoValor) || 0);
+        const status = centavos === 0 ? 'falta' : 'confirmado';
+        const cartao = b.closest('.cartao-agendamento');
+        const { error } = await sb.from('agendamentos').update({ status }).eq('id', cartao.dataset.id);
+        if (error) return feedback('Não foi possível atualizar. Tente novamente.', 'erro');
+        feedback(centavos === 0 ? 'Marcado como falta.' : `Valor atualizado para ${(centavos / 100).toFixed(2)}.`);
+        this.carregar();
+      });
+    });
+
+    // Ações de cancelar
     const mudarStatus = async (cartao, status) => {
       const { error: erro } = await sb
         .from('agendamentos')
@@ -270,31 +288,11 @@ const Agenda = {
         .eq('id', cartao.dataset.id);
       if (erro) return feedback('Não foi possível atualizar. Tente novamente.', 'erro');
       feedback({
-        concluido: 'Atendimento concluído.',
         cancelado: 'Agendamento cancelado.',
         falta: 'Marcado como falta.',
       }[status]);
       this.carregar();
     };
-
-    $$('.acao-concluir', area).forEach((b) =>
-      b.addEventListener('click', () => mudarStatus(b.closest('.cartao-agendamento'), 'concluido')));
-
-    // Editar valor: barbeiro pode zerar para marcar como falta (desconta do faturamento)
-    $$('.acao-editar-valor', area).forEach((b) =>
-      b.addEventListener('click', async () => {
-        const cartao = b.closest('.cartao-agendamento');
-        const valorSpan = cartao.querySelector('.valor-cobrado');
-        const centavosAtuais = parseInt(valorSpan.dataset.centavos);
-        const novoValor = await prompt(`Valor a cobrar (em centavos, ou 0 para marcar como falta):\n\nValor atual: ${(centavosAtuais / 100).toFixed(2)}`, String(centavosAtuais));
-        if (novoValor === null) return;
-        const centavos = Math.max(0, parseInt(novoValor) || 0);
-        const status = centavos === 0 ? 'falta' : 'confirmado';
-        const { error } = await sb.from('agendamentos').update({ status }).eq('id', cartao.dataset.id);
-        if (error) return feedback('Não foi possível atualizar. Tente novamente.', 'erro');
-        feedback(centavos === 0 ? 'Marcado como falta.' : `Valor atualizado para ${(centavos / 100).toFixed(2)}.`);
-        this.carregar();
-      }));
     $$('.acao-cancelar', area).forEach((b) =>
       b.addEventListener('click', async () => {
         const ok = await confirmar({
