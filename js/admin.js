@@ -182,6 +182,46 @@ function confirmar({ titulo = 'Tem certeza?', texto = '', confirmarLabel = 'Conf
   });
 }
 
+/**
+ * Modal de edição de valor dentro do site (substitui window.prompt, que no
+ * celular abre o pop-up feio do navegador). Recebe e devolve CENTAVOS, mas
+ * mostra e lê reais — digitar "35,50" é o que o barbeiro espera.
+ * Resolve null se ele voltar/fechar.
+ */
+function pedirValor(centavosAtuais) {
+  return new Promise((resolve) => {
+    const modal = $('#modal-valor');
+    const form = $('#form-valor');
+    const input = $('#modal-valor-input');
+    const fechaveis = [...modal.querySelectorAll('[data-fechar-valor]')];
+
+    input.value = (centavosAtuais / 100).toFixed(2).replace('.', ',');
+    modal.hidden = false;
+    input.focus();
+    input.select();
+
+    const encerrar = (resultado) => {
+      modal.hidden = true;
+      form.removeEventListener('submit', aoSalvar);
+      fechaveis.forEach((el) => el.removeEventListener('click', aoVoltar));
+      document.removeEventListener('keydown', aoTeclar);
+      resolve(resultado);
+    };
+    const aoSalvar = (e) => {
+      e.preventDefault();
+      // Aceita "35", "35,50" e "35.50"; qualquer lixo vira 0 (= falta).
+      const reais = parseFloat(input.value.replace(/\s/g, '').replace(',', '.'));
+      encerrar(Number.isFinite(reais) && reais > 0 ? Math.round(reais * 100) : 0);
+    };
+    const aoVoltar = () => encerrar(null);
+    const aoTeclar = (e) => { if (e.key === 'Escape') encerrar(null); };
+
+    form.addEventListener('submit', aoSalvar);
+    fechaveis.forEach((el) => el.addEventListener('click', aoVoltar));
+    document.addEventListener('keydown', aoTeclar);
+  });
+}
+
 /* ============================================================
    AGENDA
 ============================================================ */
@@ -207,7 +247,7 @@ const Agenda = {
     // de todas as unidades que essa conta administra, misturados.
     let consulta = sb
       .from('agendamentos')
-      .select('id, inicio, fim, status, via_assinatura, cliente_nome, cliente_celular, agendamento_servicos(servicos(nome, preco_centavos)), perfis(nome, celular), barbeiros(nome)')
+      .select('id, inicio, fim, status, via_assinatura, valor_centavos, cliente_nome, cliente_celular, agendamento_servicos(servicos(nome, preco_centavos)), perfis(nome, celular), barbeiros(nome)')
       .eq('barbearia_id', BARBEARIA_ID)
       .order('inicio', { ascending: true })
       .limit(100);
@@ -243,12 +283,21 @@ const Agenda = {
         const cliente = a.perfis?.nome || a.cliente_nome || 'Cliente';
         const celular = a.perfis?.celular || a.cliente_celular || 'sem celular';
         const semConta = !a.perfis && a.cliente_nome ? ' · <em>sem cadastro</em>' : '';
-        const valor = a.via_assinatura ? 'assinatura' : formatarPreco(serv.total);
+        // Valor cobrado de fato: o que o barbeiro editou, ou a soma dos serviços.
+        const centavos = valorCobrado(a);
+        const editado = a.valor_centavos !== null && a.valor_centavos !== undefined;
+        const blocoValor = a.via_assinatura
+          ? '<span class="valor-display">incluso no plano</span>'
+          : `<span class="valor-editar" data-centavos="${centavos}">
+               <span class="valor-display">${formatarPreco(centavos)}</span>
+               ${editado ? '<span class="valor-marca" title="Valor editado pelo barbeiro">editado</span>' : ''}
+               <button class="valor-btn" type="button" title="Editar valor ou marcar como falta" aria-label="Editar valor">✏</button>
+             </span>`;
         return `
-        <article class="cartao-agendamento vidro" data-id="${a.id}" data-valor="${serv.total}" data-via-assinatura="${a.via_assinatura}">
+        <article class="cartao-agendamento vidro" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}">
           <div class="cartao-agendamento__info">
             <strong>${formatarDataHora(a.inicio)} — ${escaparHtml(serv.nomes)} · ${escaparHtml(a.barbeiros?.nome || 'Barbeiro')}</strong>
-            <span>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)} · ${escaparHtml(celular)} ${a.via_assinatura ? '<span class="valor-display">incluso</span>' : '<span class="valor-editar" data-centavos="${serv.total}"><span class="valor-display">${valor}</span><button class="valor-btn" type="button" title="Editar ou marcar como falta" aria-label="Editar valor">✏</button></span>'}${semConta}</span>
+            <span>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)} · ${escaparHtml(celular)} · ${blocoValor}${semConta}</span>
           </div>
           <div class="cartao-agendamento__acoes">
             <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
@@ -260,23 +309,27 @@ const Agenda = {
       })
       .join('');
 
-    // Editar valor inline: clica no ícone ✏ para editar
+    // Editar valor: clica no ícone ✏ e edita no modal do site
     $$('.valor-btn', area).forEach((b) => {
       b.addEventListener('click', async () => {
         const span = b.closest('.valor-editar');
-        const centavosAtuais = parseInt(span.dataset.centavos);
-        const novoValor = await prompt(
-          `Valor a cobrar (em centavos, ou 0 para marcar como falta):\n\nValor atual: ${(centavosAtuais / 100).toFixed(2)}`,
-          String(centavosAtuais)
-        );
-        if (novoValor === null) return;
-        const centavos = Math.max(0, parseInt(novoValor) || 0);
-        const status = centavos === 0 ? 'falta' : 'confirmado';
         const cartao = b.closest('.cartao-agendamento');
-        const { error } = await sb.from('agendamentos').update({ status }).eq('id', cartao.dataset.id);
-        if (error) return feedback('Não foi possível atualizar. Tente novamente.', 'erro');
-        feedback(centavos === 0 ? 'Marcado como falta.' : `Valor atualizado para ${(centavos / 100).toFixed(2)}.`);
+        const centavos = await pedirValor(parseInt(span.dataset.centavos));
+        if (centavos === null) return; // voltou/fechou
+
+        // Zerar o valor é como o barbeiro marca falta: some do faturamento.
+        const status = centavos === 0 ? 'falta' : 'confirmado';
+        const { error } = await sb
+          .from('agendamentos')
+          .update({ valor_centavos: centavos, status })
+          .eq('id', cartao.dataset.id);
+        if (error) return feedback('Não foi possível salvar o valor. Tente novamente.', 'erro');
+
+        feedback(centavos === 0
+          ? 'Marcado como falta — fora do faturamento.'
+          : `Valor atualizado para ${formatarPreco(centavos)}.`);
         this.carregar();
+        Relatorios.carregar(); // faturamento acompanha o valor editado
       });
     });
 
@@ -1135,11 +1188,11 @@ const Relatorios = {
     const buscaAnterior = comPeriodo ? Promise.resolve({ data: [] }) : (() => {
       const prevInicio = this.inicioMesAnterior();
       const prevFim = new Date(prevInicio.getTime() + (Date.now() - inicio.getTime()));
-      return consulta(prevInicio, prevFim, 'status, agendamento_servicos(servicos(preco_centavos))');
+      return consulta(prevInicio, prevFim, 'status, valor_centavos, agendamento_servicos(servicos(preco_centavos))');
     })();
 
     const [atual, anterior] = await Promise.all([
-      consulta(inicio, fim, 'status, inicio, agendamento_servicos(servicos(nome, preco_centavos))'),
+      consulta(inicio, fim, 'status, inicio, valor_centavos, agendamento_servicos(servicos(nome, preco_centavos))'),
       buscaAnterior,
     ]);
 
@@ -1154,10 +1207,11 @@ const Relatorios = {
     const prestado = (a) => a.status !== 'cancelado';
     const concluidos = data.filter(prestado);
     const ativos = data.filter((a) => a.status !== 'cancelado');
-    const faturamento = concluidos.reduce((s, a) => s + servicosResumo(a).total, 0);
+    // valorCobrado respeita o preço que o barbeiro editou naquele atendimento.
+    const faturamento = concluidos.reduce((s, a) => s + valorCobrado(a), 0);
 
     const prevConcluidos = anterior.data.filter(prestado);
-    const prevFaturamento = prevConcluidos.reduce((s, a) => s + servicosResumo(a).total, 0);
+    const prevFaturamento = prevConcluidos.reduce((s, a) => s + valorCobrado(a), 0);
 
     // cada serviço individual dos agendamentos ativos (um agendamento pode ter vários)
     const servicosVendidos = ativos.flatMap((a) => servicosResumo(a).itens);

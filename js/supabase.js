@@ -97,6 +97,15 @@ function escaparHtml(texto) {
  * a junção agendamento_servicos). Retorna { nomes, total, itens }.
  * Espera o embed: agendamento_servicos(servicos(nome, preco_centavos)).
  */
+/**
+ * Valor realmente cobrado de um agendamento, em centavos.
+ * O barbeiro pode editar o preço de um atendimento (valor_centavos);
+ * sem edição, vale a soma dos serviços. É esta função que o faturamento usa.
+ */
+function valorCobrado(agendamento) {
+  return agendamento.valor_centavos ?? servicosResumo(agendamento).total;
+}
+
 function servicosResumo(agendamento) {
   const itens = (agendamento.agendamento_servicos || [])
     .map((x) => x.servicos)

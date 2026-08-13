@@ -764,6 +764,19 @@
   font-size: 0.9375rem;
 }
 
+/* Marca discreta de "esse preço foi editado pelo barbeiro" */
+.valor-marca {
+  padding: 0.0625rem 0.375rem;
+  border-radius: 999px;
+  background: rgba(200, 162, 74, 0.14);
+  border: 1px solid var(--cor-borda-dourada);
+  color: var(--cor-dourado);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .valor-btn {
   display: inline-flex;
   align-items: center;
@@ -1144,6 +1157,53 @@ input[type="datetime-local"] {
 .modal__icone svg {
   width: 28px;
   height: 28px;
+}
+
+/* Modal de valor: dourado em vez do vermelho de alerta */
+.modal__icone--dourado {
+  color: var(--cor-dourado);
+  background: rgba(200, 162, 74, 0.12);
+  border-color: var(--cor-borda-dourada);
+}
+
+/* Campo "R$ 00,00" do modal de valor */
+.campo-valor {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: var(--espaco-4);
+  padding: 0.625rem var(--espaco-3);
+  border-radius: var(--raio-medio, 10px);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--cor-borda-dourada);
+}
+
+.campo-valor:focus-within {
+  border-color: var(--cor-dourado);
+  box-shadow: 0 0 0 3px rgba(200, 162, 74, 0.14);
+}
+
+.campo-valor__prefixo {
+  color: var(--cor-dourado);
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.campo-valor__input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--cor-branco);
+  font-family: inherit;
+  font-size: 1.375rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.campo-valor__input:focus {
+  outline: none;
 }
 
 .modal__titulo {
