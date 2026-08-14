@@ -2,8 +2,18 @@
    BARBER DANIEL'S — REDEFINIR SENHA
    ------------------------------------------------------------
    Página aberta a partir do link enviado por resetPasswordForEmail().
-   O Supabase troca o token da URL por uma sessão temporária e
-   dispara o evento PASSWORD_RECOVERY — só então liberamos o formulário.
+
+   Dois formatos de link chegam aqui:
+
+   1. ?token_hash=...&type=recovery  (o que o modelo de e-mail manda hoje)
+      O token só é consumido no verifyOtp() abaixo, que é um POST nosso.
+      Varredura de e-mail e navegador embutido do Gmail fazem GET, e GET
+      não queima mais o link — era essa a causa do "link inválido": o
+      Gmail abria o link antes do Safari e gastava o token de uso único.
+
+   2. #access_token=... na hash (formato antigo do {{ .ConfirmationURL }})
+      Aí o próprio SDK cria a sessão e avisa pelo PASSWORD_RECOVERY.
+      Mantido para os e-mails que já foram enviados no formato velho.
 ============================================================ */
 
 'use strict';
@@ -13,6 +23,7 @@ let linkValido = false;
 function mostrarFormulario() {
   linkValido = true;
   $('#verificando-link').hidden = true;
+  $('#link-invalido').hidden = true;
   $('#form-nova-senha').hidden = false;
 }
 
@@ -22,15 +33,39 @@ function mostrarLinkInvalido() {
   $('#link-invalido').hidden = false;
 }
 
+// Formato 2: o SDK lê a hash sozinho e avisa quando a sessão sai.
 sb.auth.onAuthStateChange((evento) => {
   if (evento === 'PASSWORD_RECOVERY') mostrarFormulario();
 });
 
+/** Decide se o link vale, conforme o formato em que ele chegou. */
+async function validarLink() {
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+
+  // Quando o /verify do Supabase já recusa o link, ele devolve o motivo aqui.
+  // Sem isto a tela ficaria 8s "verificando" para só então dizer o óbvio.
+  if (query.get('error') || hash.get('error')) return mostrarLinkInvalido();
+
+  const tokenHash = query.get('token_hash');
+  if (tokenHash) {
+    const { error } = await sb.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: query.get('type') || 'recovery',
+    });
+    // Tira o token da barra de endereço: não precisa mais dele e não é
+    // coisa para ficar em histórico ou ser compartilhada sem querer.
+    window.history.replaceState(null, '', window.location.pathname);
+    return error ? mostrarLinkInvalido() : mostrarFormulario();
+  }
+
+  // Formato 2: se o evento não chegar, o link já era. Celular em rede ruim
+  // precisa de mais que os 4s de antes.
+  window.setTimeout(mostrarLinkInvalido, 8000);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   $('#ano-atual').textContent = new Date().getFullYear();
-
-  // Se o link já tiver sido consumido/expirado, o evento nunca chega
-  setTimeout(mostrarLinkInvalido, 4000);
 
   $('#form-nova-senha').addEventListener('submit', async (evento) => {
     evento.preventDefault();
@@ -60,13 +95,10 @@ document.addEventListener('DOMContentLoaded', () => {
     botao.disabled = false;
 
     if (error) {
-      const msg = error.message || error.status || '';
-      const mesmaAnterior = msg.toLowerCase().includes('same') || msg.toLowerCase().includes('previous') || msg.toLowerCase().includes('password');
-      if (mesmaAnterior && senha === $('#nova-senha').value) {
-        erro.textContent = 'A nova senha não pode ser igual à anterior. Escolha uma senha diferente.';
-      } else {
-        erro.textContent = 'Não foi possível salvar a nova senha. Tente novamente.';
-      }
+      const msg = (error.message || '').toLowerCase();
+      erro.textContent = msg.includes('same') || msg.includes('different')
+        ? 'A nova senha não pode ser igual à anterior. Escolha uma senha diferente.'
+        : 'Não foi possível salvar a nova senha. Tente novamente.';
       erro.hidden = false;
       return;
     }
@@ -75,4 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#sucesso-redefinir').hidden = false;
     $('#sucesso-redefinir-titulo').focus();
   });
+
+  validarLink();
 });
