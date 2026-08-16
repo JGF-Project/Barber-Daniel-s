@@ -226,94 +226,224 @@ function pedirValor(centavosAtuais) {
    AGENDA
 ============================================================ */
 const Agenda = {
+  barbeiros: [],
+  dia: null, // "yyyy-mm-dd" no fuso da barbearia
+  LIVRE_MINIMO_MS: 5 * 60000, // gaps menores que isso são só folga de arredondamento, não "horário livre"
+
   init() {
-    $$('input[name="filtro-agenda"]').forEach((radio) => {
-      radio.addEventListener('change', () => this.carregar());
-    });
+    this.dia = partesNoFuso(new Date()).ymd;
+    $('#agenda-barbeiro')?.addEventListener('change', () => this.carregar());
+    $('#agenda-dia-anterior')?.addEventListener('click', () => this.mudarDia(-1));
+    $('#agenda-dia-proximo')?.addEventListener('click', () => this.mudarDia(1));
+    $('#agenda-dia-rotulo')?.addEventListener('click', () => this.irParaHoje());
     $('#limpar-finalizados')?.addEventListener('click', () => this.limparFinalizados());
   },
 
-  async carregar() {
-    const area = $('#lista-agenda');
-    area.innerHTML = '<p class="app-carregando">Carregando agenda…</p>';
+  /** Preenche o seletor de barbeiros; chamado por Barbeiros.carregar() */
+  popularSeletor(barbeiros) {
+    this.barbeiros = barbeiros || [];
+    const seletor = $('#agenda-barbeiro');
+    if (!seletor) return;
+    const anterior = seletor.value;
 
-    const filtro = $('input[name="filtro-agenda"]:checked').value;
-    const agora = new Date();
-    const inicioHoje = new Date(`${partesNoFuso(agora).ymd}T00:00:00${OFFSET}`);
-    const fimHoje = new Date(inicioHoje.getTime() + 86400000);
-
-    // A mesma conta pode administrar mais de uma barbearia (sou_admin_de
-    // vale por tenant) — sem este filtro a consulta devolve agendamentos
-    // de todas as unidades que essa conta administra, misturados.
-    let consulta = sb
-      .from('agendamentos')
-      .select('id, inicio, fim, status, via_assinatura, valor_centavos, cliente_nome, cliente_celular, agendamento_servicos(servicos(nome, preco_centavos)), perfis(nome, celular), barbeiros(nome)')
-      .eq('barbearia_id', BARBEARIA_ID)
-      .order('inicio', { ascending: true })
-      .limit(100);
-
-    if (filtro === 'hoje') {
-      consulta = consulta.gte('inicio', inicioHoje.toISOString()).lt('inicio', fimHoje.toISOString());
-    } else if (filtro === 'proximos') {
-      consulta = consulta.gte('inicio', agora.toISOString()).eq('status', 'confirmado');
-    } else {
-      // todos: últimos 30 dias em diante
-      consulta = consulta.gte('inicio', new Date(agora.getTime() - 30 * 86400000).toISOString());
+    if (!this.barbeiros.length) {
+      seletor.innerHTML = '';
+      $('#agenda-resumo').innerHTML = '';
+      $('#lista-agenda').innerHTML = '<p class="app-aviso-passo">Cadastre um barbeiro na aba Barbeiros para ver a agenda.</p>';
+      return;
     }
 
-    const { data, error } = await consulta;
+    seletor.innerHTML = this.barbeiros.map((b) => `<option value="${b.id}">${escaparHtml(b.nome)}</option>`).join('');
+    if (anterior && this.barbeiros.some((b) => b.id === anterior)) seletor.value = anterior;
+    this.carregar();
+  },
 
-    if (error) {
+  mudarDia(delta) {
+    const d = new Date(`${this.dia}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + delta);
+    this.dia = d.toISOString().slice(0, 10);
+    this.carregar();
+  },
+
+  irParaHoje() {
+    this.dia = partesNoFuso(new Date()).ymd;
+    this.carregar();
+  },
+
+  rotuloDia(ymd) {
+    const hoje = partesNoFuso(new Date()).ymd;
+    if (ymd === hoje) return 'Hoje';
+    if (ymd === partesNoFuso(new Date(Date.now() + 86400000)).ymd) return 'Amanhã';
+    if (ymd === partesNoFuso(new Date(Date.now() - 86400000)).ymd) return 'Ontem';
+    return new Date(`${ymd}T12:00:00Z`).toLocaleDateString('pt-BR', {
+      timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short',
+    });
+  },
+
+  async carregar() {
+    const barbeiroId = $('#agenda-barbeiro')?.value;
+    const area = $('#lista-agenda');
+    if (!barbeiroId) return; // popularSeletor já mostrou o aviso de "sem barbeiro"
+
+    $('#agenda-dia-rotulo').textContent = this.rotuloDia(this.dia);
+    area.innerHTML = '<p class="app-carregando">Carregando agenda…</p>';
+    this.carregarResumo(barbeiroId);
+
+    const diaSemana = new Date(`${this.dia}T12:00:00Z`).getUTCDay();
+    const inicioDia = new Date(`${this.dia}T00:00:00${OFFSET}`);
+    const fimDia = new Date(inicioDia.getTime() + 86400000);
+
+    const [agendamentosRes, horarioRes] = await Promise.all([
+      sb.from('agendamentos')
+        .select('id, inicio, fim, status, via_assinatura, valor_centavos, cliente_nome, cliente_celular, agendamento_servicos(servicos(nome, preco_centavos)), perfis(nome, celular)')
+        .eq('barbearia_id', BARBEARIA_ID)
+        .eq('barbeiro_id', barbeiroId)
+        .neq('status', 'cancelado') // cancelado libera o horário: some do dia, o intervalo aparece como livre
+        .gte('inicio', inicioDia.toISOString())
+        .lt('inicio', fimDia.toISOString())
+        .order('inicio', { ascending: true }),
+      sb.from('horarios_funcionamento').select('*').eq('barbeiro_id', barbeiroId).eq('dia_semana', diaSemana).maybeSingle(),
+    ]);
+
+    if (agendamentosRes.error || horarioRes.error) {
       area.innerHTML = '<p class="app-erro">Erro ao carregar a agenda.</p>';
       return;
     }
 
-    if (!data.length) {
-      area.innerHTML = '<p class="app-aviso-passo">Nenhum agendamento neste filtro.</p>';
-      return;
+    area.innerHTML = this.montarLinhaDoTempo(agendamentosRes.data, horarioRes.data);
+    this.ligarAcoes(area);
+  },
+
+  /** Cartões "Hoje" e "Esta semana" (mesma semana, seg. a partir do domingo). Uma consulta só. */
+  async carregarResumo(barbeiroId) {
+    const area = $('#agenda-resumo');
+    const hojeYmd = partesNoFuso(new Date()).ymd;
+    const inicioHoje = new Date(`${hojeYmd}T00:00:00${OFFSET}`);
+    const fimHoje = new Date(inicioHoje.getTime() + 86400000);
+    const domingo = new Date(`${hojeYmd}T12:00:00Z`);
+    domingo.setUTCDate(domingo.getUTCDate() - domingo.getUTCDay());
+    const inicioSemana = new Date(`${domingo.toISOString().slice(0, 10)}T00:00:00${OFFSET}`);
+    const fimSemana = new Date(inicioSemana.getTime() + 7 * 86400000);
+
+    const { data, error } = await sb.from('agendamentos')
+      .select('inicio, via_assinatura, valor_centavos, agendamento_servicos(servicos(preco_centavos))')
+      .eq('barbearia_id', BARBEARIA_ID)
+      .eq('barbeiro_id', barbeiroId)
+      .neq('status', 'cancelado')
+      .gte('inicio', inicioSemana.toISOString())
+      .lt('inicio', fimSemana.toISOString());
+
+    if (error) { area.innerHTML = ''; return; }
+
+    const daHoje = data.filter((a) => {
+      const t = new Date(a.inicio);
+      return t >= inicioHoje && t < fimHoje;
+    });
+    const somar = (lista) => lista.reduce((s, a) => s + valorCobrado(a), 0);
+
+    area.innerHTML = `
+      <div class="agenda-resumo__cartao agenda-resumo__cartao--destaque">
+        <span class="agenda-resumo__rotulo">Hoje</span>
+        <span class="agenda-resumo__valor">${formatarPreco(somar(daHoje))}</span>
+        <span class="agenda-resumo__numero">${daHoje.length}</span>
+      </div>
+      <div class="agenda-resumo__cartao">
+        <span class="agenda-resumo__rotulo">Esta semana</span>
+        <span class="agenda-resumo__valor">${formatarPreco(somar(data))}</span>
+        <span class="agenda-resumo__numero">${data.length}</span>
+      </div>`;
+  },
+
+  /** Monta a coluna: hora à esquerda (só no cruzamento de hora cheia), atendimento ou vazio à direita */
+  montarLinhaDoTempo(agendamentos, horario) {
+    if (!horario || horario.fechado || !horario.abre || !horario.fecha) {
+      return '<p class="app-aviso-passo">O barbeiro não atende neste dia.</p>';
     }
 
-    area.innerHTML = data
-      .map((a) => {
-        const podeAgir = a.status === 'confirmado';
-        // Assinatura fica fora do apagar: remover a linha devolveria a cota do mês.
-        const podeApagar = (a.status === 'cancelado' || a.status === 'concluido') && !a.via_assinatura;
-        const serv = servicosResumo(a);
-        // Visitante não tem perfil — nome e telefone vêm da própria linha.
-        const cliente = a.perfis?.nome || a.cliente_nome || 'Cliente';
-        const celular = a.perfis?.celular || a.cliente_celular || 'sem celular';
-        const semConta = !a.perfis && a.cliente_nome ? ' · <em>sem cadastro</em>' : '';
-        // Valor cobrado de fato: o que o barbeiro editou, ou a soma dos serviços.
-        const centavos = valorCobrado(a);
-        const editado = a.valor_centavos !== null && a.valor_centavos !== undefined;
-        const blocoValor = a.via_assinatura
-          ? '<span class="valor-display">incluso no plano</span>'
-          : `<span class="valor-editar" data-centavos="${centavos}">
-               <span class="valor-display">${formatarPreco(centavos)}</span>
-               ${editado ? '<span class="valor-marca" title="Valor editado pelo barbeiro">editado</span>' : ''}
-               <button class="valor-btn" type="button" title="Editar valor ou marcar como falta" aria-label="Editar valor">✏</button>
-             </span>`;
-        return `
-        <article class="cartao-agendamento vidro" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}">
-          <div class="cartao-agendamento__info">
-            <strong>${formatarDataHora(a.inicio)} — ${escaparHtml(serv.nomes)} · ${escaparHtml(a.barbeiros?.nome || 'Barbeiro')}</strong>
-            <span>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)} · ${escaparHtml(celular)} · ${blocoValor}${semConta}</span>
-          </div>
-          <div class="cartao-agendamento__acoes">
-            <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
-            ${podeAgir ? `
-              <button class="botao botao--fantasma botao--pequeno acao-cancelar" type="button">Cancelar</button>` : ''}
-            ${podeApagar ? `<button class="acao-apagar" type="button" aria-label="Apagar agendamento" title="Apagar do histórico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg></button>` : ''}
-          </div>
-        </article>`;
-      })
-      .join('');
+    const abre = new Date(`${this.dia}T${horario.abre}${OFFSET}`).getTime();
+    const fecha = new Date(`${this.dia}T${horario.fecha}${OFFSET}`).getTime();
 
+    // Preenche os vãos entre atendimentos (e antes/depois deles) com blocos "livre"
+    const eventos = [];
+    let cursor = abre;
+    for (const a of agendamentos) {
+      const inicio = new Date(a.inicio).getTime();
+      const fim = new Date(a.fim).getTime();
+      if (inicio > cursor + this.LIVRE_MINIMO_MS) eventos.push({ livre: true, inicio: cursor, fim: inicio });
+      eventos.push({ livre: false, agendamento: a, inicio, fim });
+      cursor = Math.max(cursor, fim);
+    }
+    if (fecha > cursor + this.LIVRE_MINIMO_MS) eventos.push({ livre: true, inicio: cursor, fim: fecha });
+
+    if (!eventos.length) {
+      return '<p class="app-aviso-passo">Nenhum horário de expediente neste dia.</p>';
+    }
+
+    let horaMostrada = null;
+    const linhas = eventos.map((ev) => {
+      const hora = formatarHora(new Date(ev.inicio).toISOString()).split(':')[0];
+      const rotulo = hora !== horaMostrada ? `${hora}:00` : '';
+      horaMostrada = hora;
+      const bloco = ev.livre ? this.blocoLivre(ev) : this.blocoAgendamento(ev.agendamento);
+      return `<span class="linha-tempo__hora">${rotulo}</span>${bloco}`;
+    });
+
+    return `<div class="linha-tempo">${linhas.join('')}</div>`;
+  },
+
+  blocoLivre(ev) {
+    const inicio = formatarHora(new Date(ev.inicio).toISOString());
+    const fim = formatarHora(new Date(ev.fim).toISOString());
+    return `<div class="bloco-livre">${inicio} – ${fim} <strong>Disponível</strong></div>`;
+  },
+
+  blocoAgendamento(a) {
+    const podeAgir = a.status === 'confirmado';
+    // Assinatura fica fora do apagar: remover a linha devolveria a cota do mês.
+    const podeApagar = (a.status === 'cancelado' || a.status === 'concluido') && !a.via_assinatura;
+    const serv = servicosResumo(a);
+    // Visitante não tem perfil — nome e telefone vêm da própria linha.
+    const cliente = a.perfis?.nome || a.cliente_nome || 'Cliente';
+    const celular = a.perfis?.celular || a.cliente_celular || 'sem celular';
+    const semConta = !a.perfis && a.cliente_nome ? ' · <em>sem cadastro</em>' : '';
+    // Valor cobrado de fato: o que o barbeiro editou, ou a soma dos serviços.
+    const centavos = valorCobrado(a);
+    const editado = a.valor_centavos !== null && a.valor_centavos !== undefined;
+    const blocoValor = a.via_assinatura
+      ? '<span class="valor-display">incluso no plano</span>'
+      : `<span class="valor-editar" data-centavos="${centavos}">
+           <span class="valor-display">${formatarPreco(centavos)}</span>
+           ${editado ? '<span class="valor-marca" title="Valor editado pelo barbeiro">editado</span>' : ''}
+           <button class="valor-btn" type="button" title="Editar valor ou marcar como falta" aria-label="Editar valor">✏</button>
+         </span>`;
+
+    return `
+    <article class="bloco-agendamento vidro" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}">
+      <div class="bloco-agendamento__topo">
+        <span class="bloco-agendamento__hora">${formatarHora(a.inicio)} – ${formatarHora(a.fim)}</span>
+        <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
+      </div>
+      <div class="bloco-agendamento__corpo">
+        <strong>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)}</strong>
+        <span>${escaparHtml(serv.nomes)} · ${escaparHtml(celular)}${semConta}</span>
+      </div>
+      <div class="bloco-agendamento__rodape">
+        ${blocoValor}
+        <div class="cartao-agendamento__acoes">
+          ${podeAgir ? `<button class="botao botao--fantasma botao--pequeno acao-cancelar" type="button">Cancelar</button>` : ''}
+          ${podeApagar ? `<button class="acao-apagar" type="button" aria-label="Apagar agendamento" title="Apagar do histórico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg></button>` : ''}
+        </div>
+      </div>
+    </article>`;
+  },
+
+  /** Liga os cliques dos blocos recém-renderizados: editar valor, cancelar, apagar */
+  ligarAcoes(area) {
     // Editar valor: clica no ícone ✏ e edita no modal do site
     $$('.valor-btn', area).forEach((b) => {
       b.addEventListener('click', async () => {
         const span = b.closest('.valor-editar');
-        const cartao = b.closest('.cartao-agendamento');
+        const cartao = b.closest('.bloco-agendamento');
         const centavos = await pedirValor(parseInt(span.dataset.centavos));
         if (centavos === null) return; // voltou/fechou
 
@@ -353,7 +483,7 @@ const Agenda = {
           texto: 'O horário do cliente será liberado. Esta ação não pode ser desfeita.',
           confirmarLabel: 'Sim, cancelar',
         });
-        if (ok) mudarStatus(b.closest('.cartao-agendamento'), 'cancelado');
+        if (ok) mudarStatus(b.closest('.bloco-agendamento'), 'cancelado');
       }));
 
     // Apagar um agendamento finalizado (cancelado/concluído)
@@ -368,7 +498,7 @@ const Agenda = {
         const { error: erro } = await sb
           .from('agendamentos')
           .delete()
-          .eq('id', b.closest('.cartao-agendamento').dataset.id);
+          .eq('id', b.closest('.bloco-agendamento').dataset.id);
         if (erro) return feedback('Não foi possível apagar. Tente novamente.', 'erro');
         feedback('Agendamento apagado.');
         this.carregar();
@@ -683,7 +813,8 @@ const Barbeiros = {
         botao.addEventListener('click', () => this.remover(botao.closest('[data-id]'))));
     }
 
-    // Os seletores das abas Horários, Relatórios e Ausências refletem a lista atual
+    // Os seletores das abas Agenda, Horários, Relatórios e Ausências refletem a lista atual
+    Agenda.popularSeletor(data);
     Horarios.popularSeletor(data);
     Relatorios.popularSeletor(data);
     Ausencias.popularSeletor(data);
@@ -1490,6 +1621,6 @@ document.addEventListener('DOMContentLoaded', () => {
   AuthAdmin.init();
 
   // Dropdowns estilizados em todos os seletores do painel
-  ['#horarios-barbeiro', '#relatorios-barbeiro', '#ausencias-barbeiro', '#assinante-plano']
+  ['#agenda-barbeiro', '#horarios-barbeiro', '#relatorios-barbeiro', '#ausencias-barbeiro', '#assinante-plano']
     .forEach((sel) => { const el = $(sel); if (el) estilizarSelect(el); });
 });

@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css?v=4">
-  <link rel="stylesheet" href="app.css?v=4">
+  <link rel="stylesheet" href="app.css?v=5">
 </head>
 
 <body class="pagina-app pagina-admin">
@@ -137,10 +137,19 @@
 
       <!-- ===== AGENDA ===== -->
       <section class="painel" id="painel-agenda" role="tabpanel" aria-labelledby="aba-agenda">
+        <div class="agenda-resumo" id="agenda-resumo"></div>
+
+        <div class="formulario__campo formulario__campo--seletor">
+          <label for="agenda-barbeiro">Barbeiro</label>
+          <select id="agenda-barbeiro"></select>
+        </div>
+
         <div class="painel-agenda__filtros">
-          <label class="filtro-opcao"><input type="radio" name="filtro-agenda" value="proximos" checked> Próximos</label>
-          <label class="filtro-opcao"><input type="radio" name="filtro-agenda" value="hoje"> Hoje</label>
-          <label class="filtro-opcao"><input type="radio" name="filtro-agenda" value="todos"> Todos (30 dias)</label>
+          <div class="agenda-nav__dia">
+            <button class="agenda-nav__seta" type="button" id="agenda-dia-anterior" aria-label="Dia anterior">‹</button>
+            <button class="agenda-nav__hoje" type="button" id="agenda-dia-rotulo">Hoje</button>
+            <button class="agenda-nav__seta" type="button" id="agenda-dia-proximo" aria-label="Próximo dia">›</button>
+          </div>
           <button class="botao-limpar" type="button" id="limpar-finalizados">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>
             Limpar finalizados
@@ -377,6 +386,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js?v=3"></script>
-  <script src="js/admin.js?v=11"></script>
+  <script src="js/admin.js?v=12"></script>
 </body>
 </html>

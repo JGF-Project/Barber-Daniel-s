@@ -850,6 +850,176 @@
   accent-color: var(--cor-dourado);
 }
 
+/* ---------- Painel admin: resumo do dia (agenda) ---------- */
+.agenda-resumo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--espaco-2);
+  margin-bottom: var(--espaco-3);
+}
+
+.agenda-resumo__cartao {
+  padding: var(--espaco-3);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.agenda-resumo__cartao--destaque {
+  border-color: var(--cor-borda-dourada);
+  background:
+    radial-gradient(ellipse 90% 100% at 100% 0%, rgba(200, 162, 74, 0.2), transparent 70%),
+    rgba(200, 162, 74, 0.05);
+}
+
+.agenda-resumo__rotulo {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--cor-texto-suave);
+  margin-bottom: 0.4rem;
+}
+
+.agenda-resumo__cartao--destaque .agenda-resumo__rotulo {
+  color: var(--cor-dourado-claro);
+}
+
+.agenda-resumo__valor {
+  display: block;
+  font-size: 0.9375rem;
+  color: var(--cor-texto);
+  margin-bottom: var(--espaco-2);
+}
+
+.agenda-resumo__numero {
+  display: block;
+  font-family: var(--fonte-titulo);
+  font-size: 2.25rem;
+  line-height: 1;
+  color: var(--cor-branco);
+}
+
+.agenda-resumo__cartao--destaque .agenda-resumo__numero {
+  color: var(--cor-dourado-claro);
+}
+
+/* ---------- Painel admin: navegação de dia (agenda) ---------- */
+.agenda-nav__dia {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--espaco-1);
+}
+
+.agenda-nav__seta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--cor-borda);
+  background: transparent;
+  color: var(--cor-texto);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color var(--transicao-rapida), color var(--transicao-rapida);
+}
+
+.agenda-nav__seta:hover {
+  border-color: var(--cor-borda-dourada);
+  color: var(--cor-dourado);
+}
+
+.agenda-nav__hoje {
+  min-width: 7.5rem;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  font-family: var(--fonte-texto);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--cor-branco);
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+/* ---------- Painel admin: linha do tempo da agenda ---------- */
+.linha-tempo {
+  display: grid;
+  grid-template-columns: 3rem 1fr;
+  gap: 0 var(--espaco-2);
+}
+
+.linha-tempo__hora {
+  padding-top: var(--espaco-2);
+  font-size: 0.8125rem;
+  color: var(--cor-texto-suave);
+}
+
+.bloco-livre {
+  display: flex;
+  align-items: center;
+  padding: var(--espaco-2) var(--espaco-3);
+  margin-bottom: var(--espaco-2);
+  border: 1px dashed var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+  font-size: 0.8438rem;
+  color: var(--cor-texto-suave);
+}
+
+.bloco-livre strong {
+  color: var(--cor-texto);
+  font-weight: 500;
+  margin-left: 0.35rem;
+}
+
+.bloco-agendamento {
+  padding: var(--espaco-2) var(--espaco-3);
+  margin-bottom: var(--espaco-2);
+}
+
+.bloco-agendamento__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espaco-2);
+  margin-bottom: var(--espaco-2);
+}
+
+.bloco-agendamento__hora {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--cor-dourado-claro);
+}
+
+.bloco-agendamento__corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: var(--espaco-2);
+}
+
+.bloco-agendamento__corpo strong {
+  font-weight: 500;
+  color: var(--cor-branco);
+  font-size: 0.9688rem;
+}
+
+.bloco-agendamento__corpo span {
+  font-size: 0.8438rem;
+  color: var(--cor-texto-suave);
+}
+
+.bloco-agendamento__rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espaco-2);
+  flex-wrap: wrap;
+  padding-top: var(--espaco-2);
+  border-top: 1px solid var(--cor-borda);
+}
+
 /* ---------- Painel admin: serviços ---------- */
 .linha-servico {
   display: flex;
