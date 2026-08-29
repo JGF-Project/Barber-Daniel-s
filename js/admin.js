@@ -1564,16 +1564,25 @@ function estilizarSelect(select) {
   document.body.appendChild(lista);
 
   const fechar = () => { lista.hidden = true; botao.classList.remove('aberto'); botao.setAttribute('aria-expanded', 'false'); };
-  const abrir = () => {
-    // Recalcula a cada abertura — a página pode ter rolado ou o layout mudado.
+  const posicionar = () => {
     const r = botao.getBoundingClientRect();
     lista.style.top = `${r.bottom + 6}px`;
     lista.style.left = `${r.left}px`;
     lista.style.width = `${r.width}px`;
+  };
+  const abrir = () => {
+    posicionar(); // recalcula a cada abertura — a página pode ter rolado ou o layout mudado
     lista.hidden = false;
     botao.classList.add('aberto');
     botao.setAttribute('aria-expanded', 'true');
   };
+
+  // A posição também precisa ser refeita DEPOIS de aberta: a fonte do Google
+  // Fonts pode terminar de carregar um instante depois do clique (comum em
+  // 4G) e empurrar todo o layout, deixando a lista presa na posição antiga
+  // enquanto o botão já está em outro lugar — o vão que aparecia entre eles.
+  document.fonts?.ready.then(() => { if (!lista.hidden) posicionar(); });
+  window.addEventListener('resize', () => { if (!lista.hidden) posicionar(); });
 
   function render() {
     const atual = select.options[select.selectedIndex];
