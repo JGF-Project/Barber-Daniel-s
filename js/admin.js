@@ -1584,6 +1584,18 @@ function estilizarSelect(select) {
   document.fonts?.ready.then(() => { if (!lista.hidden) posicionar(); });
   window.addEventListener('resize', () => { if (!lista.hidden) posicionar(); });
 
+  // Rolar a página é o gatilho mais comum de todos: o botão está no fluxo
+  // normal e se move com o scroll, mas a lista é position:fixed presa nas
+  // coordenadas do clique — sem isto ela ficava para trás, "flutuando"
+  // longe do botão. Fecha em vez de tentar seguir: mais simples e sem o
+  // custo de recalcular a cada evento de scroll. capture:true pega o
+  // scroll de qualquer contêiner rolável, não só da página inteira.
+  window.addEventListener('scroll', (e) => {
+    // e.target do scroll da própria janela é o objeto `window`, não um nó —
+    // .contains() só aceita Node, daí o "instanceof Node" antes de checar.
+    if (!lista.hidden && !(e.target instanceof Node && lista.contains(e.target))) fechar();
+  }, { capture: true, passive: true });
+
   function render() {
     const atual = select.options[select.selectedIndex];
     botao.textContent = atual ? atual.textContent : 'Selecione…';
