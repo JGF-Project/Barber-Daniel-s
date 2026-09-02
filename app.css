@@ -1090,23 +1090,6 @@
   min-height: 2.5rem;
 }
 
-.bloco-livre {
-  display: flex;
-  align-items: center;
-  padding: var(--espaco-2) var(--espaco-3);
-  margin-bottom: var(--espaco-2);
-  border: 1px dashed var(--cor-borda);
-  border-radius: var(--raio-pequeno);
-  font-size: 0.8438rem;
-  color: var(--cor-texto-suave);
-}
-
-.bloco-livre strong {
-  color: var(--cor-texto);
-  font-weight: 500;
-  margin-left: 0.35rem;
-}
-
 .bloco-agendamento {
   padding: var(--espaco-2) var(--espaco-3);
   margin-bottom: var(--espaco-2);

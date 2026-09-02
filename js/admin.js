@@ -228,7 +228,6 @@ function pedirValor(centavosAtuais) {
 const Agenda = {
   barbeiros: [],
   dia: null, // "yyyy-mm-dd" no fuso da barbearia
-  LIVRE_MINIMO_MS: 5 * 60000, // gaps menores que isso são só folga de arredondamento, não "horário livre"
 
   init() {
     this.dia = partesNoFuso(new Date()).ymd;
@@ -415,8 +414,8 @@ const Agenda = {
   },
 
   /** Monta a coluna: uma linha de hora cheia para cada hora do expediente (10:00, 11:00, 12:00…),
-   * igual ao app de referência do Daniel — não só nas horas em que algo começa. Atendimento ou
-   * "livre" à direita, agrupados na hora em que começam; hora sem nada começando nela fica em branco. */
+   * igual ao app de referência do Daniel — não só nas horas em que algo começa. Atendimentos
+   * agrupados na hora em que começam; hora sem nada começando nela fica em branco. */
   montarLinhaDoTempo(agendamentos, horario) {
     if (!horario || horario.fechado || !horario.abre || !horario.fecha) {
       return '<p class="app-aviso-passo">O barbeiro não atende neste dia.</p>';
@@ -424,22 +423,10 @@ const Agenda = {
 
     const abre = new Date(`${this.dia}T${horario.abre}${OFFSET}`).getTime();
     const fecha = new Date(`${this.dia}T${horario.fecha}${OFFSET}`).getTime();
-
-    // Preenche os vãos entre atendimentos (e antes/depois deles) com blocos "livre"
-    const eventos = [];
-    let cursor = abre;
-    for (const a of agendamentos) {
-      const inicio = new Date(a.inicio).getTime();
-      const fim = new Date(a.fim).getTime();
-      if (inicio > cursor + this.LIVRE_MINIMO_MS) eventos.push({ livre: true, inicio: cursor, fim: inicio });
-      eventos.push({ livre: false, agendamento: a, inicio, fim });
-      cursor = Math.max(cursor, fim);
-    }
-    if (fecha > cursor + this.LIVRE_MINIMO_MS) eventos.push({ livre: true, inicio: cursor, fim: fecha });
-
-    if (!eventos.length) {
-      return '<p class="app-aviso-passo">Nenhum horário de expediente neste dia.</p>';
-    }
+    const eventos = agendamentos.map((a) => ({
+      agendamento: a,
+      inicio: new Date(a.inicio).getTime(),
+    }));
 
     // Fuso da barbearia é fixo (-03:00, Brasil não tem mais horário de verão — ver supabase.js),
     // então "hora cheia local" dá pra calcular só deslocando o epoch, sem Intl por linha.
@@ -458,18 +445,11 @@ const Agenda = {
         continue;
       }
       doHora.forEach((ev, i) => {
-        const bloco = ev.livre ? this.blocoLivre(ev) : this.blocoAgendamento(ev.agendamento);
-        linhas.push(`<span class="linha-tempo__hora">${i === 0 ? rotulo : ''}</span>${bloco}`);
+        linhas.push(`<span class="linha-tempo__hora">${i === 0 ? rotulo : ''}</span>${this.blocoAgendamento(ev.agendamento)}`);
       });
     }
 
     return `<div class="linha-tempo">${linhas.join('')}</div>`;
-  },
-
-  blocoLivre(ev) {
-    const inicio = formatarHora(new Date(ev.inicio).toISOString());
-    const fim = formatarHora(new Date(ev.fim).toISOString());
-    return `<div class="bloco-livre">${inicio} – ${fim} <strong>Disponível</strong></div>`;
   },
 
   blocoAgendamento(a) {
