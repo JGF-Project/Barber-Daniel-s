@@ -414,7 +414,9 @@ const Agenda = {
       </div>`;
   },
 
-  /** Monta a coluna: hora à esquerda (só no cruzamento de hora cheia), atendimento ou vazio à direita */
+  /** Monta a coluna: uma linha de hora cheia para cada hora do expediente (10:00, 11:00, 12:00…),
+   * igual ao app de referência do Daniel — não só nas horas em que algo começa. Atendimento ou
+   * "livre" à direita, agrupados na hora em que começam; hora sem nada começando nela fica em branco. */
   montarLinhaDoTempo(agendamentos, horario) {
     if (!horario || horario.fechado || !horario.abre || !horario.fecha) {
       return '<p class="app-aviso-passo">O barbeiro não atende neste dia.</p>';
@@ -439,14 +441,27 @@ const Agenda = {
       return '<p class="app-aviso-passo">Nenhum horário de expediente neste dia.</p>';
     }
 
-    let horaMostrada = null;
-    const linhas = eventos.map((ev) => {
-      const hora = formatarHora(new Date(ev.inicio).toISOString()).split(':')[0];
-      const rotulo = hora !== horaMostrada ? `${hora}:00` : '';
-      horaMostrada = hora;
-      const bloco = ev.livre ? this.blocoLivre(ev) : this.blocoAgendamento(ev.agendamento);
-      return `<span class="linha-tempo__hora">${rotulo}</span>${bloco}`;
-    });
+    // Fuso da barbearia é fixo (-03:00, Brasil não tem mais horário de verão — ver supabase.js),
+    // então "hora cheia local" dá pra calcular só deslocando o epoch, sem Intl por linha.
+    const TRES_HORAS_MS = 3 * 3600000;
+    const horaCheiaLocal = (ms) => Math.floor((ms - TRES_HORAS_MS) / 3600000);
+    const horaParaMs = (h) => h * 3600000 + TRES_HORAS_MS;
+
+    const primeiraHora = horaCheiaLocal(abre);
+    const ultimaHora = horaCheiaLocal(fecha - 1); // fecha é exclusivo: -1ms evita uma hora vazia extra quando fecha cai certinho na hora cheia
+    const linhas = [];
+    for (let h = primeiraHora; h <= ultimaHora; h++) {
+      const doHora = eventos.filter((ev) => horaCheiaLocal(ev.inicio) === h);
+      const rotulo = formatarHora(new Date(horaParaMs(h)).toISOString());
+      if (!doHora.length) {
+        linhas.push(`<span class="linha-tempo__hora">${rotulo}</span><span class="linha-tempo__vazio"></span>`);
+        continue;
+      }
+      doHora.forEach((ev, i) => {
+        const bloco = ev.livre ? this.blocoLivre(ev) : this.blocoAgendamento(ev.agendamento);
+        linhas.push(`<span class="linha-tempo__hora">${i === 0 ? rotulo : ''}</span>${bloco}`);
+      });
+    }
 
     return `<div class="linha-tempo">${linhas.join('')}</div>`;
   },

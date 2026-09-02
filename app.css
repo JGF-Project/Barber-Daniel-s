@@ -1079,6 +1079,11 @@
   color: var(--cor-texto-suave);
 }
 
+/* Hora do expediente sem nada começando nela — só o espaço, sem cartão */
+.linha-tempo__vazio {
+  min-height: 2.5rem;
+}
+
 .bloco-livre {
   display: flex;
   align-items: center;
