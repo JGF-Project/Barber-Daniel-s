@@ -1022,6 +1022,12 @@
 }
 
 /* ---------- Painel admin: barra inferior fixa da agenda ---------- */
+/* position: sticky no desktop (respeita a coluna de conteúdo ao lado do menu
+   lateral), mas sticky só gruda DENTRO dos limites do próprio contêiner —
+   como esta barra é o último elemento de #painel-agenda, ela se soltava perto
+   do fim do scroll (a lista de horários é longa) e sobrava um vão embaixo. No
+   mobile, onde o menu lateral vira um drawer e não disputa largura, troca
+   para fixed: sem contêiner pra "soltar", fica sempre grudada na tela. */
 .agenda-barra-inferior {
   position: sticky;
   bottom: 0;
@@ -2009,6 +2015,22 @@ input[type="datetime-local"] {
   .painel-layout {
     grid-template-columns: 1fr;
     gap: var(--espaco-3);
+  }
+
+  /* fixed em vez de sticky (ver comentário na regra base) — sem menu lateral
+     disputando largura, dá pra cravar na tela inteira sem medo de desalinhar */
+  .agenda-barra-inferior {
+    position: fixed;
+    left: var(--espaco-2);
+    right: var(--espaco-2);
+    bottom: calc(var(--espaco-2) + env(safe-area-inset-bottom, 0px));
+    margin-top: 0;
+    padding-bottom: var(--espaco-2);
+  }
+
+  /* espaço pra última linha da agenda não ficar embaixo da barra fixa */
+  #painel-agenda {
+    padding-bottom: 6rem;
   }
 
   .painel-menu-toggle {
