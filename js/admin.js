@@ -233,10 +233,16 @@ const Agenda = {
   init() {
     this.dia = partesNoFuso(new Date()).ymd;
     $('#agenda-barbeiro')?.addEventListener('change', () => this.carregar());
-    $('#agenda-dia-anterior')?.addEventListener('click', () => this.mudarDia(-1));
-    $('#agenda-dia-proximo')?.addEventListener('click', () => this.mudarDia(1));
-    $('#agenda-dia-rotulo')?.addEventListener('click', () => this.irParaHoje());
+    // Delegado: os dias e as setas de semana são recriados a cada render de montarFaixaSemana()
+    $('#agenda-semana')?.addEventListener('click', (e) => {
+      const semana = e.target.closest('[data-semana]');
+      if (semana) return this.mudarSemana(parseInt(semana.dataset.semana, 10));
+      if (e.target.closest('.agenda-semana__hoje')) return this.irParaHoje();
+      const dia = e.target.closest('[data-dia]');
+      if (dia) { this.dia = dia.dataset.dia; this.carregar(); }
+    });
     $('#limpar-finalizados')?.addEventListener('click', () => this.limparFinalizados());
+    $('#agenda-sair')?.addEventListener('click', () => sb.auth.signOut());
   },
 
   /** Preenche o seletor de barbeiros; chamado por Barbeiros.carregar() */
@@ -258,9 +264,9 @@ const Agenda = {
     this.carregar();
   },
 
-  mudarDia(delta) {
+  mudarSemana(delta) {
     const d = new Date(`${this.dia}T12:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + delta);
+    d.setUTCDate(d.getUTCDate() + delta * 7);
     this.dia = d.toISOString().slice(0, 10);
     this.carregar();
   },
@@ -270,14 +276,69 @@ const Agenda = {
     this.carregar();
   },
 
-  rotuloDia(ymd) {
-    const hoje = partesNoFuso(new Date()).ymd;
-    if (ymd === hoje) return 'Hoje';
-    if (ymd === partesNoFuso(new Date(Date.now() + 86400000)).ymd) return 'Amanhã';
-    if (ymd === partesNoFuso(new Date(Date.now() - 86400000)).ymd) return 'Ontem';
-    return new Date(`${ymd}T12:00:00Z`).toLocaleDateString('pt-BR', {
-      timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short',
+  /** Domingo (yyyy-mm-dd) da semana que contém o dia informado */
+  domingoDaSemana(ymd) {
+    const d = new Date(`${ymd}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+    return d.toISOString().slice(0, 10);
+  },
+
+  /** Cabeçalho com o intervalo da semana (calendário + setas) e a faixa de 7 dias clicáveis */
+  montarFaixaSemana() {
+    const area = $('#agenda-semana');
+    if (!area) return;
+    const domingo = this.domingoDaSemana(this.dia);
+    const dias = [...Array(7)].map((_, i) => {
+      const d = new Date(`${domingo}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + i);
+      return d.toISOString().slice(0, 10);
     });
+    const rotulo = (ymd) => {
+      const d = new Date(`${ymd}T12:00:00Z`);
+      return `${d.getUTCDate()} ${MESES_CURTOS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    };
+
+    area.innerHTML = `
+      <div class="agenda-semana__cabecalho">
+        <button class="agenda-semana__hoje" type="button" title="Ir para hoje" aria-label="Ir para hoje">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+        </button>
+        <span class="agenda-semana__intervalo">${rotulo(dias[0])} à ${rotulo(dias[6])}</span>
+        <button class="agenda-nav__seta" type="button" data-semana="-1" aria-label="Semana anterior">‹</button>
+        <button class="agenda-nav__seta" type="button" data-semana="1" aria-label="Próxima semana">›</button>
+      </div>
+      <div class="agenda-semana__dias">
+        ${dias.map((ymd) => {
+          const d = new Date(`${ymd}T12:00:00Z`);
+          const ativo = ymd === this.dia;
+          const temAgendamento = this._diasComAgendamento?.has(ymd);
+          return `<button class="agenda-semana__dia${ativo ? ' agenda-semana__dia--ativo' : ''}" type="button" data-dia="${ymd}">
+            <span class="agenda-semana__abrev">${DIAS_CURTOS[d.getUTCDay()].toUpperCase()}</span>
+            <span class="agenda-semana__numero">${d.getUTCDate()}</span>
+            <span class="agenda-semana__ponto"${temAgendamento ? '' : ' hidden'}></span>
+          </button>`;
+        }).join('')}
+      </div>`;
+  },
+
+  /** Quais dias da semana em exibição têm agendamento — só para os pontinhos da faixa. Cacheado por barbeiro+semana. */
+  async atualizarPontosSemana(barbeiroId, domingo) {
+    const chave = `${barbeiroId}:${domingo}`;
+    if (this._semanaPontosCarregada === chave) return;
+    const inicio = new Date(`${domingo}T00:00:00${OFFSET}`);
+    const fim = new Date(inicio.getTime() + 7 * 86400000);
+    const { data, error } = await sb.from('agendamentos')
+      .select('inicio')
+      .eq('barbearia_id', BARBEARIA_ID)
+      .eq('barbeiro_id', barbeiroId)
+      .neq('status', 'cancelado')
+      .gte('inicio', inicio.toISOString())
+      .lt('inicio', fim.toISOString());
+    // a tela pode ter mudado de semana/barbeiro enquanto isto rodava — só aplica se ainda é o que está em exibição
+    if (error || this.domingoDaSemana(this.dia) !== domingo || $('#agenda-barbeiro')?.value !== barbeiroId) return;
+    this._semanaPontosCarregada = chave;
+    this._diasComAgendamento = new Set(data.map((a) => partesNoFuso(new Date(a.inicio)).ymd));
+    this.montarFaixaSemana();
   },
 
   async carregar() {
@@ -285,7 +346,8 @@ const Agenda = {
     const area = $('#lista-agenda');
     if (!barbeiroId) return; // popularSeletor já mostrou o aviso de "sem barbeiro"
 
-    $('#agenda-dia-rotulo').textContent = this.rotuloDia(this.dia);
+    this.montarFaixaSemana();
+    this.atualizarPontosSemana(barbeiroId, this.domingoDaSemana(this.dia)); // roda em paralelo, redesenha a faixa quando os pontinhos chegarem
     area.innerHTML = '<p class="app-carregando">Carregando agenda…</p>';
     this.carregarResumo(barbeiroId);
 
@@ -320,9 +382,7 @@ const Agenda = {
     const hojeYmd = partesNoFuso(new Date()).ymd;
     const inicioHoje = new Date(`${hojeYmd}T00:00:00${OFFSET}`);
     const fimHoje = new Date(inicioHoje.getTime() + 86400000);
-    const domingo = new Date(`${hojeYmd}T12:00:00Z`);
-    domingo.setUTCDate(domingo.getUTCDate() - domingo.getUTCDay());
-    const inicioSemana = new Date(`${domingo.toISOString().slice(0, 10)}T00:00:00${OFFSET}`);
+    const inicioSemana = new Date(`${this.domingoDaSemana(hojeYmd)}T00:00:00${OFFSET}`);
     const fimSemana = new Date(inicioSemana.getTime() + 7 * 86400000);
 
     const { data, error } = await sb.from('agendamentos')
