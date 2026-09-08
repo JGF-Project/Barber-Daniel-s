@@ -824,9 +824,50 @@ const Assinantes = {
 /* ============================================================
    BARBEIROS (equipe)
 ============================================================ */
+
+/** Sobe a foto pro Storage (bucket "barbeiro-fotos", 1 arquivo por barbeiro — upsert
+ * sobrescreve) e grava a URL pública em barbeiros.foto_url. Devolve o erro, ou null. */
+async function subirFotoBarbeiro(barbeiroId, arquivo) {
+  const ext = (arquivo.name.split('.').pop() || 'jpg').toLowerCase();
+  const caminho = `${BARBEARIA_ID}/${barbeiroId}.${ext}`;
+  const { error: erroUpload } = await sb.storage.from('barbeiro-fotos').upload(caminho, arquivo, { upsert: true });
+  if (erroUpload) return erroUpload;
+
+  const { data } = sb.storage.from('barbeiro-fotos').getPublicUrl(caminho);
+  // ?v= força o navegador a buscar de novo — sem isto, trocar a foto de um barbeiro que
+  // já tinha uma (mesmo caminho) continuaria mostrando a antiga, cacheada.
+  const fotoUrl = `${data.publicUrl}?v=${Date.now()}`;
+  const { error: erroSalvar } = await sb.from('barbeiros').update({ foto_url: fotoUrl }).eq('id', barbeiroId);
+  return erroSalvar || null;
+}
+
+/** Liga um <label class="foto-barbeiro"> (com <input type="file"> dentro) a clique
+ * (nativo, via <label for>) e arrastar-e-soltar. Chama onEscolher(arquivo) e já mostra
+ * a prévia — quem chama decide o que fazer com o arquivo (subir na hora, ou guardar). */
+function ligarFotoBarbeiro(label, onEscolher) {
+  const input = $('input[type="file"]', label);
+  const escolher = (arquivo) => {
+    if (!arquivo || !arquivo.type.startsWith('image/')) return;
+    label.style.backgroundImage = `url(${URL.createObjectURL(arquivo)})`;
+    label.classList.add('foto-barbeiro--preenchida');
+    onEscolher(arquivo);
+  };
+  input.addEventListener('change', () => escolher(input.files[0]));
+  label.addEventListener('dragover', (e) => { e.preventDefault(); label.classList.add('foto-barbeiro--sobre'); });
+  label.addEventListener('dragleave', () => label.classList.remove('foto-barbeiro--sobre'));
+  label.addEventListener('drop', (e) => {
+    e.preventDefault();
+    label.classList.remove('foto-barbeiro--sobre');
+    escolher(e.dataTransfer.files[0]);
+  });
+}
+
 const Barbeiros = {
+  novaFoto: null, // arquivo escolhido no formulário de novo barbeiro, sobe só depois do insert (precisa do id)
+
   init() {
     $('#form-novo-barbeiro').addEventListener('submit', (e) => this.adicionar(e));
+    ligarFotoBarbeiro($('#novo-barbeiro-foto'), (arquivo) => { this.novaFoto = arquivo; });
   },
 
   async carregar() {
@@ -849,6 +890,10 @@ const Barbeiros = {
         .map(
           (b) => `
         <form class="linha-servico vidro" data-id="${b.id}">
+          <label class="foto-barbeiro${b.foto_url ? ' foto-barbeiro--preenchida' : ''}" ${b.foto_url ? `style="background-image:url('${escaparHtml(b.foto_url)}')"` : ''} tabindex="0">
+            <input type="file" accept="image/*" hidden>
+            <svg class="foto-barbeiro__icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+          </label>
           <div class="formulario__campo">
             <label>Nome do barbeiro
               <input type="text" name="nome" value="${escaparHtml(b.nome)}" maxlength="80" required>
@@ -862,8 +907,13 @@ const Barbeiros = {
         )
         .join('');
 
-      $$('form.linha-servico', area).forEach((form) =>
-        form.addEventListener('submit', (e) => this.salvar(e, form)));
+      $$('form.linha-servico', area).forEach((form) => {
+        form.addEventListener('submit', (e) => this.salvar(e, form));
+        ligarFotoBarbeiro($('.foto-barbeiro', form), async (arquivo) => {
+          const erro = await subirFotoBarbeiro(form.dataset.id, arquivo);
+          feedback(erro ? 'Não foi possível salvar a foto.' : 'Foto atualizada.', erro ? 'erro' : 'info');
+        });
+      });
       $$('.acao-remover-barbeiro', area).forEach((botao) =>
         botao.addEventListener('click', () => this.remover(botao.closest('[data-id]'))));
     }
@@ -880,10 +930,20 @@ const Barbeiros = {
     const nome = $('#novo-barbeiro-nome').value.trim();
     if (nome.length < 2) return feedback('Informe o nome do barbeiro.', 'erro');
 
-    const { error } = await sb.from('barbeiros').insert({ nome, barbearia_id: BARBEARIA_ID });
+    // A foto só pode subir depois do insert — o caminho no Storage usa o id gerado pelo banco.
+    const { data, error } = await sb.from('barbeiros').insert({ nome, barbearia_id: BARBEARIA_ID }).select().single();
     if (error) return feedback('Não foi possível adicionar o barbeiro.', 'erro');
 
+    if (this.novaFoto) {
+      const erroFoto = await subirFotoBarbeiro(data.id, this.novaFoto);
+      if (erroFoto) feedback('Barbeiro adicionado, mas a foto não pôde ser salva — tente de novo na lista abaixo.', 'erro');
+    }
+
     evento.target.reset();
+    const foto = $('#novo-barbeiro-foto');
+    foto.style.backgroundImage = '';
+    foto.classList.remove('foto-barbeiro--preenchida');
+    this.novaFoto = null;
     feedback('Barbeiro adicionado. Configure os horários dele na aba Horários.');
     this.carregar();
   },

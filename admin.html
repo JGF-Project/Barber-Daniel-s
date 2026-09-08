@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css?v=4">
-  <link rel="stylesheet" href="app.css?v=9">
+  <link rel="stylesheet" href="app.css?v=10">
 </head>
 
 <body class="pagina-app pagina-admin">
@@ -261,9 +261,16 @@
         <details class="novo-servico vidro">
           <summary>+ Adicionar novo barbeiro</summary>
           <form class="formulario" id="form-novo-barbeiro">
-            <div class="formulario__campo">
-              <label for="novo-barbeiro-nome">Nome do barbeiro</label>
-              <input type="text" id="novo-barbeiro-nome" placeholder="Ex.: João" maxlength="80" required>
+            <div class="formulario__linha-foto">
+              <label class="foto-barbeiro" id="novo-barbeiro-foto" for="novo-barbeiro-foto-input" tabindex="0">
+                <input type="file" id="novo-barbeiro-foto-input" accept="image/*" hidden>
+                <svg class="foto-barbeiro__icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>
+              </label>
+              <div class="formulario__campo">
+                <label for="novo-barbeiro-nome">Nome do barbeiro</label>
+                <input type="text" id="novo-barbeiro-nome" placeholder="Ex.: João" maxlength="80" required>
+                <span class="formulario__dica">Arraste uma foto pro círculo ao lado, ou clique nele — fica opcional.</span>
+              </div>
             </div>
             <button class="botao botao--primario" type="submit">Adicionar barbeiro</button>
           </form>
@@ -393,6 +400,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js?v=3"></script>
-  <script src="js/admin.js?v=18"></script>
+  <script src="js/admin.js?v=19"></script>
 </body>
 </html>

@@ -198,6 +198,29 @@
   flex: 1;
 }
 
+/* Foto do barbeiro no card de escolha (passo "Barbeiro") */
+.opcao-servico__foto {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--raio-pequeno);
+  background-color: rgba(255, 255, 255, 0.04);
+  background-size: cover;
+  background-position: center top;
+}
+
+.opcao-servico__foto--vazia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--cor-borda-dourada);
+  color: var(--cor-dourado);
+}
+
+.opcao-servico__foto--vazia svg {
+  width: 32%;
+  height: 32%;
+}
+
 .opcao-servico__base {
   display: flex;
   align-items: baseline;
@@ -1192,6 +1215,69 @@
 .linha-servico input:focus {
   outline: none;
   border-color: var(--cor-dourado);
+}
+
+/* ---------- Foto do barbeiro (arrastar/soltar ou clique) ---------- */
+.formulario__linha-foto {
+  display: flex;
+  gap: var(--espaco-3);
+  align-items: center;
+  margin-bottom: var(--espaco-3);
+}
+
+.formulario__linha-foto .formulario__campo {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.formulario__dica {
+  display: block;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--cor-texto-suave);
+}
+
+.foto-barbeiro {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  align-self: center;
+  border-radius: 50%;
+  border: 1.5px dashed var(--cor-borda-dourada);
+  background-color: rgba(200, 162, 74, 0.06);
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  transition: border-color var(--transicao-rapida), background-color var(--transicao-rapida);
+}
+
+.foto-barbeiro:hover,
+.foto-barbeiro:focus-visible {
+  border-color: var(--cor-dourado);
+  outline: none;
+}
+
+.foto-barbeiro--sobre {
+  border-color: var(--cor-dourado);
+  background-color: rgba(200, 162, 74, 0.18);
+}
+
+.foto-barbeiro--preenchida {
+  border-style: solid;
+}
+
+.foto-barbeiro__icone {
+  width: 24px;
+  height: 24px;
+  color: var(--cor-dourado);
+  pointer-events: none;
+}
+
+.foto-barbeiro--preenchida .foto-barbeiro__icone {
+  display: none;
 }
 
 .linha-servico__numeros {

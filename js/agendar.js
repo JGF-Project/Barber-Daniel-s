@@ -401,7 +401,7 @@ const Agendamento = {
   async carregarBarbeiros() {
     const { data, error } = await sb
       .from('barbeiros')
-      .select('id, nome')
+      .select('id, nome, foto_url')
       .eq('ativo', true)
       .eq('barbearia_id', BARBEARIA_ID)
       .order('criado_em');
@@ -413,6 +413,10 @@ const Agendamento = {
     }
 
     Estado.barbeiros = data;
+    const iconePadrao = '<span class="opcao-servico__foto opcao-servico__foto--vazia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg></span>';
+    const foto = (b) => b.foto_url
+      ? `<span class="opcao-servico__foto" style="background-image:url('${escaparHtml(b.foto_url)}')"></span>`
+      : iconePadrao;
     const cartaoQualquer = `
         <button class="opcao-servico opcao-servico--curinga vidro" type="button" data-id="qualquer">
           <span class="opcao-servico__nome">Sem preferência</span>
@@ -422,6 +426,7 @@ const Agendamento = {
       .map(
         (b) => `
         <button class="opcao-servico vidro" type="button" data-id="${b.id}">
+          ${foto(b)}
           <span class="opcao-servico__nome">${escaparHtml(b.nome)}</span>
         </button>`
       )
