@@ -601,7 +601,7 @@ const Servicos = {
       .select('*')
       .eq('barbearia_id', BARBEARIA_ID)
       .eq('assinatura', false)
-      .order('criado_em');
+      .order('ordem', { ascending: true, nullsFirst: false }); // mesma ordem que o cliente vê; sem ordem definida vai pro fim
 
     if (error) {
       area.innerHTML = '<p class="app-erro">Erro ao carregar serviços.</p>';
@@ -890,7 +890,7 @@ const Barbeiros = {
         .map(
           (b) => `
         <form class="linha-servico vidro" data-id="${b.id}">
-          <label class="foto-barbeiro${b.foto_url ? ' foto-barbeiro--preenchida' : ''}" ${b.foto_url ? `style="background-image:url('${escaparHtml(b.foto_url)}')"` : ''} tabindex="0">
+          <label class="foto-barbeiro${b.foto_url ? ' foto-barbeiro--preenchida' : ''}" tabindex="0">
             <input type="file" accept="image/*" hidden>
             <svg class="foto-barbeiro__icone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>
           </label>
@@ -909,7 +909,11 @@ const Barbeiros = {
 
       $$('form.linha-servico', area).forEach((form) => {
         form.addEventListener('submit', (e) => this.salvar(e, form));
-        ligarFotoBarbeiro($('.foto-barbeiro', form), async (arquivo) => {
+        const b = data.find((x) => x.id === form.dataset.id);
+        const fotoLabel = $('.foto-barbeiro', form);
+        // O CSP do site barra style="" inline — via JS (CSSOM) passa pela mesma política.
+        if (b?.foto_url) fotoLabel.style.backgroundImage = `url('${b.foto_url}')`;
+        ligarFotoBarbeiro(fotoLabel, async (arquivo) => {
           const erro = await subirFotoBarbeiro(form.dataset.id, arquivo);
           feedback(erro ? 'Não foi possível salvar a foto.' : 'Foto atualizada.', erro ? 'erro' : 'info');
         });

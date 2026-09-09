@@ -414,9 +414,6 @@ const Agendamento = {
 
     Estado.barbeiros = data;
     const iconePadrao = '<span class="opcao-servico__foto opcao-servico__foto--vazia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg></span>';
-    const foto = (b) => b.foto_url
-      ? `<span class="opcao-servico__foto" style="background-image:url('${escaparHtml(b.foto_url)}')"></span>`
-      : iconePadrao;
     const cartaoQualquer = `
         <button class="opcao-servico opcao-servico--curinga vidro" type="button" data-id="qualquer">
           <span class="opcao-servico__nome">Sem preferência</span>
@@ -426,11 +423,19 @@ const Agendamento = {
       .map(
         (b) => `
         <button class="opcao-servico vidro" type="button" data-id="${b.id}">
-          ${foto(b)}
+          ${b.foto_url ? '<span class="opcao-servico__foto"></span>' : iconePadrao}
           <span class="opcao-servico__nome">${escaparHtml(b.nome)}</span>
         </button>`
       )
       .join('');
+
+    // O CSP do site barra style="" inline (só permite CSS de arquivo) — atribuir a
+    // propriedade via JS (CSSOM) em vez de no HTML passa pela mesma política.
+    data.forEach((b) => {
+      if (!b.foto_url) return;
+      const foto = area.querySelector(`[data-id="${b.id}"] .opcao-servico__foto`);
+      if (foto) foto.style.backgroundImage = `url('${b.foto_url}')`;
+    });
 
     $$('.opcao-servico', area).forEach((botao) => {
       botao.addEventListener('click', async () => {
@@ -459,7 +464,7 @@ const Agendamento = {
       .eq('barbearia_id', BARBEARIA_ID)
       .order('assinatura', { ascending: false })       // plano primeiro
       .order('categoria_assinatura', { ascending: true }) // 'corte' antes de 'pezinho'
-      .order('preco_centavos');
+      .order('ordem', { ascending: true, nullsFirst: false }); // ordem escolhida pelo Daniel; sem ordem definida vai pro fim
 
     const area = $('#lista-servicos');
     if (error || !data?.length) {
