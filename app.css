@@ -205,7 +205,10 @@
   border-radius: var(--raio-pequeno);
   background-color: rgba(255, 255, 255, 0.04);
   background-size: cover;
-  background-position: center top;
+  /* 35% (não "top"): as fotos são em pé e o rosto fica no terço de cima —
+     "top" cortava mostrando o teto/câmera acima do barbeiro. */
+  background-position: center 35%;
+  border: 1.5px solid var(--cor-dourado);
 }
 
 .opcao-servico__foto--vazia {

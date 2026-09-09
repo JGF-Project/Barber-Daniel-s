@@ -401,7 +401,7 @@ const Agendamento = {
   async carregarBarbeiros() {
     const { data, error } = await sb
       .from('barbeiros')
-      .select('id, nome, foto_url')
+      .select('id, nome, foto_url, atende_planos')
       .eq('ativo', true)
       .eq('barbearia_id', BARBEARIA_ID)
       .order('criado_em');
@@ -495,7 +495,7 @@ const Agendamento = {
       }
       if (botao.disabled) return;
 
-      botao.addEventListener('click', () => {
+      botao.addEventListener('click', async () => {
         const s = Estado.servicos.find((x) => x.id === botao.dataset.id);
         const i = Estado.servicosEscolhidos.findIndex((x) => x.id === s.id);
 
@@ -516,6 +516,10 @@ const Agendamento = {
           b.classList.toggle('escolhido', Estado.servicosEscolhidos.some((x) => x.id === b.dataset.id));
         });
 
+        // Plano só com o barbeiro responsável — pode trocar o barbeiro escolhido
+        const trocouBarbeiro = this.aplicarRestricaoPlanoBarbeiro();
+        if (trocouBarbeiro) await this.carregarHorarios();
+
         Estado.horarioEscolhido = null;
         this.atualizarTotalServicos();
         this.montarDias();
@@ -523,6 +527,10 @@ const Agendamento = {
         this.atualizarResumo();
       });
     });
+
+    // Reflete a restrição de plano→barbeiro caso a lista re-renderize com um
+    // plano já selecionado (ex.: assinante que fez login no meio do fluxo).
+    this.aplicarRestricaoPlanoBarbeiro();
   },
 
   /** HTML de um serviço. O plano ganha coroa, cota explícita e trava. */
@@ -566,6 +574,37 @@ const Agendamento = {
     return Estado.barbeiroEscolhido ? [Estado.barbeiroEscolhido.id] : [];
   },
 
+  /**
+   * Plano de assinatura é atendido só por barbeiro atende_planos (o Daniel).
+   * Quando um plano está selecionado: esconde "sem preferência" e os barbeiros
+   * que não atendem plano, e já deixa o responsável escolhido. Fora do plano,
+   * mostra todos de novo. (O banco também barra — isto é só a UX.)
+   * Devolve true se trocou o barbeiro (o chamador recarrega os horários).
+   */
+  aplicarRestricaoPlanoBarbeiro() {
+    const area = $('#lista-barbeiros');
+    if (!area) return false;
+    const plano = planoSelecionado();
+    const doPlano = Estado.barbeiros.filter((b) => b.atende_planos);
+
+    $$('.opcao-servico', area).forEach((card) => {
+      const id = card.dataset.id;
+      const mostra = !plano || (id !== 'qualquer' && doPlano.some((b) => b.id === id));
+      card.hidden = !mostra;
+    });
+
+    if (!plano) return false;
+    const jaValido = Estado.barbeiroEscolhido && Estado.barbeiroEscolhido.atende_planos;
+    if (jaValido || !doPlano.length) return false;
+
+    Estado.semPreferencia = false;
+    Estado.barbeiroEscolhido = doPlano[0];
+    $$('.opcao-servico', area).forEach((c) => c.classList.toggle('escolhido', c.dataset.id === doPlano[0].id));
+    Estado.diaEscolhido = null;
+    Estado.horarioEscolhido = null;
+    return true;
+  },
+
   async carregarHorarios() {
     Estado.horariosPorBarbeiro = {};
     Estado.bloqueiosPorBarbeiro = {};
@@ -574,8 +613,9 @@ const Agendamento = {
 
     const [horarios, bloqueios] = await Promise.all([
       sb.from('horarios_funcionamento').select('*').in('barbeiro_id', ids),
-      sb.from('bloqueios').select('barbeiro_id, inicio, fim').in('barbeiro_id', ids)
-        .gt('fim', new Date().toISOString()),
+      // Via RPC (não a tabela direta): devolve só as janelas, sem o "motivo"
+      // da ausência, que é anotação interna do barbeiro e não é da conta do cliente.
+      sb.rpc('bloqueios_publicos', { p_barbeiros: ids }),
     ]);
 
     (horarios.data || []).forEach((h) => {
