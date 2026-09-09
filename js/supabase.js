@@ -85,11 +85,17 @@ function mascararCelular(valor) {
 const $ = (sel, ctx = document) => ctx.querySelector(sel);
 const $$ = (sel, ctx = document) => [...ctx.querySelectorAll(sel)];
 
-/** Escapa texto vindo do banco antes de inserir em HTML */
+/** Escapa texto vindo do banco antes de inserir em HTML.
+ * Escapa aspas também: textContent sozinho só cuida de & < >, e isso não basta
+ * quando o valor cai dentro de um atributo (value="...", title="..."), onde uma
+ * aspa fecharia o atributo e deixaria injetar outro. */
 function escaparHtml(texto) {
-  const div = document.createElement('div');
-  div.textContent = texto ?? '';
-  return div.innerHTML;
+  return String(texto ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 /**
