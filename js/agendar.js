@@ -473,11 +473,13 @@ const Agendamento = {
     }
 
     // A RLS libera as linhas de plano também para o admin (ele precisa vê-las
-    // na aba Assinantes). Na tela de agendar, só o dono do plano de corte pode
-    // ver a própria linha de corte — o pezinho é liberado junto por ser bônus
-    // incluso em qualquer plano (eh_meu_plano() já garante isso no banco).
+    // na aba Assinantes — inclusive quando o admin testa o próprio site de
+    // cliente logado). Aqui só o dono do plano de corte pode ver a própria
+    // linha de corte. O pezinho NÃO é um plano à parte — é bônus incluso no
+    // plano de corte, sem cartão próprio; por isso nunca entra nesta lista,
+    // nem para quem assina (o uso dele é acompanhado só na aba "Minha assinatura").
     const meuPlanoId = Estado.assinatura?.servico_id;
-    const visiveis = data.filter((s) => !s.assinatura || s.id === meuPlanoId || s.categoria_assinatura === 'pezinho');
+    const visiveis = data.filter((s) => !s.assinatura || s.id === meuPlanoId);
 
     Estado.servicos = visiveis;
     // Um serviço que sumiu da lista (ex.: perdeu o plano ao sair da conta)
