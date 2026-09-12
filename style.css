@@ -205,6 +205,12 @@ address {
   transform: scale(1.05);
 }
 
+/* Se sobrar 1 item sozinho na última linha da grade de 3 colunas,
+   centraliza em vez de deixar dois espaços vazios do lado dele. */
+.galeria__item:last-child:nth-child(3n + 1) {
+  grid-column: 2 / 3;
+}
+
 /* Placeholder enquanto as fotos dos cortes não chegam */
 .galeria__vazia {
   border: 1px dashed var(--cor-borda-dourada);
@@ -642,6 +648,7 @@ address {
 }
 
 .hero__titulo em {
+  white-space: nowrap;
   font-style: italic;
   background: linear-gradient(120deg, var(--cor-dourado-claro), var(--cor-dourado));
   -webkit-background-clip: text;
@@ -1472,6 +1479,12 @@ address {
   .galeria__grade {
     grid-template-columns: repeat(2, 1fr);
     gap: var(--espaco-2);
+  }
+
+  /* Em 2 colunas o total geralmente fecha certinho — desliga a
+     centralização feita para a grade de 3 colunas do desktop. */
+  .galeria__item:last-child:nth-child(3n + 1) {
+    grid-column: auto;
   }
 
   .hero__acoes .botao {
