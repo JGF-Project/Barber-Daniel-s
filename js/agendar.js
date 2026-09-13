@@ -134,15 +134,23 @@ const Assinatura = {
     this.aplicar();
   },
 
-  /** Ids dos serviços de plano que o cliente já tem — usado para filtrar a lista de serviços */
+  /** Ids de todo serviço de plano que o cliente já tem acesso — inclui o(s)
+   * plano(s) de corte e, se aplicável, o pezinho — usado para filtrar a lista
+   * de serviços exibida (Estado.assinaturas já vem com essa linha do pezinho
+   * quando o cliente tem qualquer plano de corte). */
   meusPlanoIds() {
     return new Set(Estado.assinaturas.map((a) => a.servico_id));
   },
 
+  /** Linha de cota (plano ou pezinho) correspondente a um serviço específico */
+  porServico(servicoId) {
+    return Estado.assinaturas.find((a) => a.servico_id === servicoId) || null;
+  },
+
   /** Liga/desliga tudo que é visível só para assinante */
   aplicar() {
-    const lista = Estado.assinaturas;
-    const tem = lista.length > 0;
+    const planos = Estado.assinaturas.filter((a) => a.categoria === 'corte');
+    const tem = Estado.assinaturas.length > 0;
     $('#selo-assinante').hidden = !tem;
     $('#aba-assinatura').hidden = !tem;
 
@@ -152,30 +160,31 @@ const Assinatura = {
       return;
     }
 
-    $('#plano-nome').textContent = lista.map((a) => a.nome).join(' + ');
-    $('#plano-descricao').textContent = lista.map((a) => a.descricao || '').filter(Boolean).join(' · ');
-    $('#plano-cota').innerHTML = this.textoCota();
+    $('#plano-nome').textContent = planos.map((a) => a.nome).join(' + ') || 'Assinante';
+    $('#plano-descricao').textContent = planos.map((a) => a.descricao || '').filter(Boolean).join(' · ');
+    $('#plano-cota').innerHTML = planos[0] ? this.textoCota(planos[0]) : '';
   },
 
-  /** Frase da cota, usada na aba e no card do plano — mesma para qualquer plano do cliente */
-  textoCota() {
-    const a = Estado.assinaturas[0];
+  /** Frase da cota de uma linha específica (plano de corte ou pezinho) */
+  textoCota(a) {
     if (!a) return '';
+    const palavra = a.categoria === 'pezinho' ? 'pezinho' : 'visita';
     if (a.restantes <= 0) {
-      return 'Você já usou as <strong>4 visitas deste mês</strong>. A cota volta no mês que vem.';
+      return `Você já usou as <strong>4 ${palavra}s deste mês</strong>. A cota volta no mês que vem.`;
     }
     if (a.usado_semana) {
-      return `Restam <strong>${a.restantes} de 4</strong> este mês, mas a visita <strong>desta semana</strong> já foi usada.`;
+      return `Restam <strong>${a.restantes} de 4</strong> este mês, mas o(a) ${palavra} <strong>desta semana</strong> já foi usado(a).`;
     }
     return `Restam <strong>${a.restantes} de 4</strong> este mês · 1 por semana · seg a sex`;
   },
 
-  /** Pode agendar pelo plano? */
-  bloqueio() {
-    const a = Estado.assinaturas[0];
+  /** Pode agendar esse serviço específico (plano ou pezinho) pela assinatura? */
+  bloqueio(servicoId) {
+    const a = this.porServico(servicoId);
     if (!a) return 'Plano indisponível.';
-    if (a.restantes <= 0) return 'Você já usou as 4 visitas deste mês.';
-    if (a.usado_semana) return 'Você já usou sua visita desta semana.';
+    const palavra = a.categoria === 'pezinho' ? 'pezinho' : 'visita';
+    if (a.restantes <= 0) return `Você já usou os(as) 4 ${palavra}s deste mês.`;
+    if (a.usado_semana) return `Você já usou seu(sua) ${palavra} desta semana.`;
     return null;
   },
 };
@@ -462,8 +471,11 @@ const Agendamento = {
 
     // A RLS libera as linhas de plano também para o admin (ele precisa vê-las
     // na aba Assinantes — inclusive quando o admin testa o próprio site de
-    // cliente logado). Aqui só o dono de um plano vê a própria linha — um
-    // cliente pode ter mais de um plano ativo ao mesmo tempo.
+    // cliente logado). Aqui só o dono de um plano vê a própria linha. Um
+    // cliente pode ter mais de um plano de corte ao mesmo tempo, e quem tem
+    // qualquer plano de corte também ganha o cartão de pezinho (cota própria,
+    // independente da cota de corte) — minha_assinatura() já entrega essa
+    // linha extra quando aplicável.
     const meusPlanoIds = Assinatura.meusPlanoIds();
     const visiveis = data.filter((s) => !s.assinatura || meusPlanoIds.has(s.id));
 
@@ -473,7 +485,7 @@ const Agendamento = {
     Estado.servicosEscolhidos = Estado.servicosEscolhidos.filter((e) => visiveis.some((s) => s.id === e.id));
 
     area.innerHTML = visiveis
-      .map((s) => this.cartaoServico(s, s.assinatura ? Assinatura.bloqueio() : null))
+      .map((s) => this.cartaoServico(s, s.assinatura ? Assinatura.bloqueio(s.id) : null))
       .join('');
 
     $$('.opcao-servico', area).forEach((botao) => {
@@ -547,7 +559,7 @@ const Agendamento = {
         </span>
         <span class="opcao-servico__descricao">${escaparHtml(s.descricao || '')}</span>
         <span class="opcao-servico__cota${travado ? ' opcao-servico__cota--travado' : ''}">
-          ${travado ? escaparHtml(bloqueio) : Assinatura.textoCota()}
+          ${travado ? escaparHtml(bloqueio) : Assinatura.textoCota(Assinatura.porServico(s.id))}
         </span>
         <span class="opcao-servico__base">
           <strong>${travado ? 'Indisponível' : 'Incluso no plano'}</strong>
