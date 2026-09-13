@@ -793,10 +793,10 @@ const Assinantes = {
     });
 
     if (error) {
-      // 23505 = já existe assinatura para esse e-mail nesta barbearia
+      // 23505 = esse e-mail já tem ESSE plano especificamente (pode ter outros diferentes)
       return feedback(
         error.code === '23505'
-          ? 'Esse e-mail já é assinante. Remova antes para trocar de plano.'
+          ? 'Esse e-mail já tem esse plano.'
           : 'Não foi possível adicionar. Tente novamente.',
         'erro'
       );

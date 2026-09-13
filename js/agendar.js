@@ -10,7 +10,7 @@
 /* Grade de horários candidatos: um início a cada 15 minutos.
    15 (e não 30) para que o próximo horário livre encaixe logo após serviços
    de duração variável — ex.: um corte de 75min às 16:00 libera as 17:15. */
-const PASSO_MINUTOS = 15;
+const PASSO_MINUTOS = 30;
 /* Antecedência mínima para agendar (em minutos) */
 const ANTECEDENCIA_MIN = 30;
 /* Nomes completos dos meses para o cabeçalho do calendário */
@@ -32,7 +32,7 @@ const Estado = {
   horarioEscolhido: null,      // Date de início
   mesVisivel: null,            // Date (dia 1, em UTC) do mês exibido no calendário
   aguardandoConfirmacao: false, // true quando o login foi pedido no meio da confirmação
-  assinatura: null,            // { servico_id, nome, descricao, usados, restantes, usado_semana } ou null
+  assinaturas: [],             // [{ servico_id, nome, descricao, usados, restantes, usado_semana }, ...] — pode ter mais de um plano
   agendouComoVisitante: false, // esconde "ver meus agendamentos" no sucesso
 };
 
@@ -117,41 +117,49 @@ const Assinatura = {
     }
   },
 
-  /** Recarrega o plano e a cota. p_inicio = mês/semana que interessa consultar. */
+  /** Recarrega os planos e a cota. p_inicio = mês/semana que interessa consultar.
+   * Um cliente pode ter mais de um plano ativo ao mesmo tempo — Estado.assinaturas
+   * é sempre um array (vazio quando não é assinante). A cota (usados/restantes) é
+   * por CLIENTE, não por plano, então é igual em todas as linhas retornadas. */
   async carregar(inicio = null) {
     if (!Estado.sessao) {
-      Estado.assinatura = null;
+      Estado.assinaturas = [];
       this.aplicar();
       return;
     }
     await this.marcarAtrasados(); // marca automaticamente antes de recarregar cota
     const args = inicio ? { p_inicio: inicio.toISOString() } : {};
     const { data } = await sb.rpc('minha_assinatura', args);
-    Estado.assinatura = data?.[0] || null;
+    Estado.assinaturas = data || [];
     this.aplicar();
+  },
+
+  /** Ids dos serviços de plano que o cliente já tem — usado para filtrar a lista de serviços */
+  meusPlanoIds() {
+    return new Set(Estado.assinaturas.map((a) => a.servico_id));
   },
 
   /** Liga/desliga tudo que é visível só para assinante */
   aplicar() {
-    const a = Estado.assinatura;
-    $('#selo-assinante').hidden = !a;
-    $('#aba-assinatura').hidden = !a;
+    const lista = Estado.assinaturas;
+    const tem = lista.length > 0;
+    $('#selo-assinante').hidden = !tem;
+    $('#aba-assinatura').hidden = !tem;
 
-    if (!a) {
+    if (!tem) {
       // Se estava na aba da assinatura e a pessoa saiu da conta, volta para "novo"
       if (!$('#painel-assinatura').hidden) Abas.mostrar('novo');
       return;
     }
 
-    $('#plano-nome').textContent = a.nome;
-    $('#plano-descricao').textContent = a.descricao || '';
+    $('#plano-nome').textContent = lista.map((a) => a.nome).join(' + ');
+    $('#plano-descricao').textContent = lista.map((a) => a.descricao || '').filter(Boolean).join(' · ');
     $('#plano-cota').innerHTML = this.textoCota();
-    $('#plano-pezinhos-cota').innerHTML = this.textoQuotaPezinhos();
   },
 
-  /** Frase da cota, usada na aba e no card do plano */
+  /** Frase da cota, usada na aba e no card do plano — mesma para qualquer plano do cliente */
   textoCota() {
-    const a = Estado.assinatura;
+    const a = Estado.assinaturas[0];
     if (!a) return '';
     if (a.restantes <= 0) {
       return 'Você já usou as <strong>4 visitas deste mês</strong>. A cota volta no mês que vem.';
@@ -162,30 +170,10 @@ const Assinatura = {
     return `Restam <strong>${a.restantes} de 4</strong> este mês · 1 por semana · seg a sex`;
   },
 
-  /** Cota de pezinhos — independente da cota de cortes */
-  textoQuotaPezinhos() {
-    const a = Estado.assinatura;
-    if (!a) return '';
-    if (a.pezinhos_restantes <= 0) {
-      return 'Você já usou os <strong>4 pezinhos deste mês</strong>. A cota volta no mês que vem.';
-    }
-    if (a.pezinhos_usado_semana) {
-      return `Restam <strong>${a.pezinhos_restantes} de 4</strong> este mês, mas o pezinho <strong>desta semana</strong> já foi usado.`;
-    }
-    return `Restam <strong>${a.pezinhos_restantes} de 4</strong> este mês · 1 por semana · seg a sex`;
-  },
-
-  /** Pode agendar pelo plano da categoria informada ('corte' ou 'pezinho')? Cada uma tem cota própria. */
-  bloqueio(categoria = 'corte') {
-    const a = Estado.assinatura;
+  /** Pode agendar pelo plano? */
+  bloqueio() {
+    const a = Estado.assinaturas[0];
     if (!a) return 'Plano indisponível.';
-
-    if (categoria === 'pezinho') {
-      if (a.pezinhos_restantes <= 0) return 'Você já usou os 4 pezinhos deste mês.';
-      if (a.pezinhos_usado_semana) return 'Você já usou seu pezinho desta semana.';
-      return null;
-    }
-
     if (a.restantes <= 0) return 'Você já usou as 4 visitas deste mês.';
     if (a.usado_semana) return 'Você já usou sua visita desta semana.';
     return null;
@@ -474,12 +462,10 @@ const Agendamento = {
 
     // A RLS libera as linhas de plano também para o admin (ele precisa vê-las
     // na aba Assinantes — inclusive quando o admin testa o próprio site de
-    // cliente logado). Aqui só o dono do plano de corte pode ver a própria
-    // linha de corte. O pezinho NÃO é um plano à parte — é bônus incluso no
-    // plano de corte, sem cartão próprio; por isso nunca entra nesta lista,
-    // nem para quem assina (o uso dele é acompanhado só na aba "Minha assinatura").
-    const meuPlanoId = Estado.assinatura?.servico_id;
-    const visiveis = data.filter((s) => !s.assinatura || s.id === meuPlanoId);
+    // cliente logado). Aqui só o dono de um plano vê a própria linha — um
+    // cliente pode ter mais de um plano ativo ao mesmo tempo.
+    const meusPlanoIds = Assinatura.meusPlanoIds();
+    const visiveis = data.filter((s) => !s.assinatura || meusPlanoIds.has(s.id));
 
     Estado.servicos = visiveis;
     // Um serviço que sumiu da lista (ex.: perdeu o plano ao sair da conta)
@@ -487,7 +473,7 @@ const Agendamento = {
     Estado.servicosEscolhidos = Estado.servicosEscolhidos.filter((e) => visiveis.some((s) => s.id === e.id));
 
     area.innerHTML = visiveis
-      .map((s) => this.cartaoServico(s, s.assinatura ? Assinatura.bloqueio(s.categoria_assinatura) : null))
+      .map((s) => this.cartaoServico(s, s.assinatura ? Assinatura.bloqueio() : null))
       .join('');
 
     $$('.opcao-servico', area).forEach((botao) => {
@@ -561,7 +547,7 @@ const Agendamento = {
         </span>
         <span class="opcao-servico__descricao">${escaparHtml(s.descricao || '')}</span>
         <span class="opcao-servico__cota${travado ? ' opcao-servico__cota--travado' : ''}">
-          ${travado ? escaparHtml(bloqueio) : (s.categoria_assinatura === 'pezinho' ? Assinatura.textoQuotaPezinhos() : Assinatura.textoCota())}
+          ${travado ? escaparHtml(bloqueio) : Assinatura.textoCota()}
         </span>
         <span class="opcao-servico__base">
           <strong>${travado ? 'Indisponível' : 'Incluso no plano'}</strong>
@@ -794,18 +780,20 @@ const Agendamento = {
       })
       .filter(Boolean);
 
-    // Slot livre = algum candidato cobre [inicio, fim] com o expediente dele e sem conflito
+    // Slot livre = algum candidato cobre o início dentro do expediente dele e
+    // sem conflito. O último horário do dia é o próprio fechamento — o
+    // atendimento pode terminar depois (o cliente entra na cadeira até lá).
     const janelaInicio = candidatos.length ? Math.min(...candidatos.map((c) => c.abre)) : 0;
     const janelaFim = candidatos.length ? Math.max(...candidatos.map((c) => c.fecha)) : 0;
 
     const slots = [];
-    for (let t = janelaInicio; t + duracaoMs <= janelaFim; t += PASSO_MINUTOS * 60000) {
+    for (let t = janelaInicio; t <= janelaFim; t += PASSO_MINUTOS * 60000) {
       const inicio = t;
       const fim = t + duracaoMs;
       if (inicio < agora) continue; // horário já passou (ou muito em cima)
 
       const disponivel = candidatos.some((c) =>
-        inicio >= c.abre && fim <= c.fecha &&
+        inicio >= c.abre && inicio <= c.fecha &&
         !c.ocupados.some((o) => inicio < o.fim && fim > o.inicio)
       );
       if (disponivel) slots.push(new Date(inicio));
