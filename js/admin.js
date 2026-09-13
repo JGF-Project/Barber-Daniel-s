@@ -730,8 +730,11 @@ const Assinantes = {
     const area = $('#lista-assinantes');
 
     const [planos, assinantes] = await Promise.all([
+      // Pezinho é bônus automático de quem já tem plano de corte, não algo
+      // que se atribui direto — por isso fica fora deste dropdown.
       sb.from('servicos').select('id, nome, descricao, preco_centavos')
-        .eq('barbearia_id', BARBEARIA_ID).eq('assinatura', true).eq('ativo', true).order('preco_centavos'),
+        .eq('barbearia_id', BARBEARIA_ID).eq('assinatura', true).eq('ativo', true)
+        .eq('categoria_assinatura', 'corte').order('preco_centavos'),
       sb.rpc('assinantes_admin', { p_barbearia: BARBEARIA_ID }),
     ]);
 
