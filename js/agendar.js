@@ -798,10 +798,17 @@ const Agendamento = {
     const janelaInicio = candidatos.length ? Math.min(...candidatos.map((c) => c.abre)) : 0;
     const janelaFim = candidatos.length ? Math.max(...candidatos.map((c) => c.fecha)) : 0;
 
+    // Pontos de início candidatos = grade fixa de 30 em 30 + o horário exato em
+    // que cada atendimento termina. Sem isso, um corte de 40min às 10:00 (termina
+    // 10:40) deixa os próximos 20min mortos: a grade só oferece 10:30 (conflita)
+    // e 11:00 (livre), sem nunca sugerir 10:40 — o barbeiro perde esse tempo.
+    const pontos = new Set();
+    for (let t = janelaInicio; t <= janelaFim; t += PASSO_MINUTOS * 60000) pontos.add(t);
+    candidatos.forEach((c) => c.ocupados.forEach((o) => pontos.add(o.fim)));
+
     const slots = [];
-    for (let t = janelaInicio; t <= janelaFim; t += PASSO_MINUTOS * 60000) {
-      const inicio = t;
-      const fim = t + duracaoMs;
+    for (const inicio of [...pontos].sort((a, b) => a - b)) {
+      const fim = inicio + duracaoMs;
       if (inicio < agora) continue; // horário já passou (ou muito em cima)
 
       const disponivel = candidatos.some((c) =>
