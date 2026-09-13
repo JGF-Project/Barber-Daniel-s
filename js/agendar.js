@@ -806,17 +806,44 @@ const Agendamento = {
     for (let t = janelaInicio; t <= janelaFim; t += PASSO_MINUTOS * 60000) pontos.add(t);
     candidatos.forEach((c) => c.ocupados.forEach((o) => pontos.add(o.fim)));
 
+    // Duração mais comum entre os serviços avulsos (a moda, não o máximo — um
+    // outlier como Progressiva de 50min tornaria quase todo buraco "pequeno
+    // demais"). Na prática isso cai na duração do corte, o serviço do dia a
+    // dia: um buraco menor que isso tende a sobrar sem próximo cliente para
+    // preencher. Só conta como morto quando os dois lados são compromissos
+    // reais — contra a abertura/fechamento não conta, porque outro
+    // agendamento ainda pode nascer bem ali.
+    const contagem = new Map();
+    Estado.servicos.filter((s) => !s.assinatura).forEach((s) => contagem.set(s.duracao_min, (contagem.get(s.duracao_min) || 0) + 1));
+    const duracaoTipicaMs = contagem.size
+      ? [...contagem.entries()].reduce((a, b) => (b[1] > a[1] ? b : a))[0] * 60000
+      : 0;
+
     const slots = [];
     for (const inicio of [...pontos].sort((a, b) => a - b)) {
       const fim = inicio + duracaoMs;
       if (inicio < agora) continue; // horário já passou (ou muito em cima)
 
-      const disponivel = candidatos.some((c) =>
+      const candidato = candidatos.find((c) =>
         inicio >= c.abre && inicio <= c.fecha &&
         !c.ocupados.some((o) => inicio < o.fim && fim > o.inicio)
       );
-      if (disponivel) slots.push(new Date(inicio));
+      if (!candidato) continue;
+
+      const eventoAntes = Math.max(candidato.abre, ...candidato.ocupados.filter((o) => o.fim <= inicio).map((o) => o.fim));
+      const buracoAntes = eventoAntes > candidato.abre ? inicio - eventoAntes : 0;
+
+      const eventoDepois = Math.min(candidato.fecha, ...candidato.ocupados.filter((o) => o.inicio >= fim).map((o) => o.inicio));
+      const buracoDepois = eventoDepois - fim;
+
+      const fragmenta = (buracoAntes > 0 && buracoAntes < duracaoTipicaMs) || (buracoDepois > 0 && buracoDepois < duracaoTipicaMs);
+
+      slots.push({ data: new Date(inicio), fragmenta });
     }
+
+    // Horários que não deixam buraco morto vêm primeiro — sem tirar nenhuma
+    // opção da lista, só sugerindo os que aproveitam melhor a agenda do Daniel.
+    slots.sort((a, b) => a.fragmenta - b.fragmenta || a.data - b.data);
 
     if (slots.length === 0) {
       area.innerHTML = '<p class="app-aviso-passo">Nenhum horário livre neste dia. Escolha outro dia.</p>';
@@ -824,7 +851,7 @@ const Agendamento = {
     }
 
     area.innerHTML = slots
-      .map((d) => `<button class="opcao-horario" type="button" data-iso="${d.toISOString()}">${formatarHora(d.toISOString())}</button>`)
+      .map(({ data, fragmenta }) => `<button class="opcao-horario${fragmenta ? ' opcao-horario--fragmenta' : ''}" type="button" data-iso="${data.toISOString()}">${formatarHora(data.toISOString())}</button>`)
       .join('');
 
     $$('.opcao-horario', area).forEach((botao) => {

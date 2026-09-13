@@ -422,6 +422,12 @@
   font-weight: 600;
 }
 
+/* Deixa um buraco pequeno demais para qualquer serviço na agenda do Daniel —
+   continua disponível, só vem depois dos horários que encaixam melhor. */
+.opcao-horario--fragmenta {
+  opacity: 0.6;
+}
+
 /* Resumo e confirmação */
 .resumo {
   display: flex;
