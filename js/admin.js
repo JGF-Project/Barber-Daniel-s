@@ -732,7 +732,7 @@ const Assinantes = {
     const [planos, assinantes] = await Promise.all([
       // Pezinho é bônus automático de quem já tem plano de corte, não algo
       // que se atribui direto — por isso fica fora deste dropdown.
-      sb.from('servicos').select('id, nome, descricao, preco_centavos')
+      sb.from('servicos').select('id, nome, descricao, preco_centavos, duracao_min')
         .eq('barbearia_id', BARBEARIA_ID).eq('assinatura', true).eq('ativo', true)
         .eq('categoria_assinatura', 'corte').order('preco_centavos'),
       sb.rpc('assinantes_admin', { p_barbearia: BARBEARIA_ID }),
@@ -747,6 +747,29 @@ const Assinantes = {
     $('#assinante-plano').innerHTML = this.planos
       .map((p) => `<option value="${p.id}">${escaparHtml(p.nome)}</option>`)
       .join('');
+
+    $('#lista-planos-duracao').innerHTML = this.planos
+      .map((p) => `
+        <form class="linha-servico vidro" data-id="${p.id}">
+          <div class="formulario__campo"><label>${escaparHtml(p.nome)}</label></div>
+          <div class="formulario__campo">
+            <label>Duração do atendimento (min)
+              <input type="number" name="duracao" min="10" max="240" step="5" value="${p.duracao_min}" required>
+            </label>
+          </div>
+          <button class="botao botao--primario botao--pequeno" type="submit">Salvar</button>
+        </form>`)
+      .join('');
+    $$('#lista-planos-duracao form', document).forEach((form) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const { error } = await sb.from('servicos')
+          .update({ duracao_min: parseInt(form.duracao.value, 10) })
+          .eq('id', form.dataset.id);
+        if (error) return feedback('Não foi possível salvar.', 'erro');
+        feedback('Duração atualizada.');
+      });
+    });
 
     const lista = assinantes.data || [];
     if (!lista.length) {
