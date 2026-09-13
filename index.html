@@ -66,7 +66,7 @@
       </a>
 
       <div class="cabecalho__acoes">
-        <a class="botao botao--fantasma botao--pequeno" href="agendar.html#meus">Entrar</a>
+        <a class="botao botao--fantasma botao--pequeno" id="link-entrar" href="agendar.html#meus">Entrar</a>
         <a class="botao botao--primario botao--pequeno" href="agendar.html">Agendar agora</a>
       </div>
     </div>
@@ -247,5 +247,19 @@
 
   <!-- Scripts -->
   <script src="script.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js?v=5"></script>
+  <script>
+    // Reflete se a pessoa já está logada (mesma sessão de agendar.html —
+    // a landing não tinha essa checagem, por isso sempre mostrava "Entrar".
+    sb.auth.getSession().then(({ data }) => {
+      const sessao = data.session;
+      if (!sessao) return;
+      const link = document.getElementById('link-entrar');
+      const nome = sessao.user.user_metadata?.nome || sessao.user.email;
+      link.textContent = `Olá, ${nome.split(' ')[0]}`;
+      link.href = 'agendar.html#meus';
+    });
+  </script>
 </body>
 </html>

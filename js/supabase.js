@@ -10,10 +10,16 @@
  * Cliente Supabase.
  * A chave abaixo é PÚBLICA (publishable): o que cada usuário pode
  * fazer é controlado pelo Row Level Security no banco.
+ *
+ * storageKey separado por página: sem isso, admin.html e agendar.html usam
+ * a mesma chave de sessão no localStorage (mesmo domínio), então logar como
+ * cliente "vaza" pro painel do barbeiro e sair do painel desloga o cliente
+ * também. Cada área guarda sua própria sessão, independente da outra.
  */
 const sb = supabase.createClient(
   'https://giduojgtoyjyxfndusqy.supabase.co',
-  'sb_publishable_fnHeH_u1L-pIE1g4lPRLWA_lLrYyenF'
+  'sb_publishable_fnHeH_u1L-pIE1g4lPRLWA_lLrYyenF',
+  { auth: { storageKey: location.pathname.includes('admin') ? 'sb-barberdaniels-admin' : 'sb-barberdaniels-cliente' } }
 );
 
 /* Projeto é multi-tenant (várias barbearias no mesmo banco).

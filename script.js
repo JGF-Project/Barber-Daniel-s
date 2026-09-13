@@ -18,8 +18,11 @@
 /* ============================================================
    01. UTILITÁRIOS
 ============================================================ */
-const $ = (seletor, contexto = document) => contexto.querySelector(seletor);
-const $$ = (seletor, contexto = document) => [...contexto.querySelectorAll(seletor)];
+// Nomes diferentes de $/$$ de propósito: a página também carrega
+// js/supabase.js, que já usa $/$$ para a mesma coisa — mantendo nomes
+// distintos aqui não há nenhuma declaração para colidir.
+const qs = (seletor, contexto = document) => contexto.querySelector(seletor);
+const qsa = (seletor, contexto = document) => [...contexto.querySelectorAll(seletor)];
 
 /** Respeita a preferência do usuário por menos movimento */
 const movimentoReduzido = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -29,7 +32,7 @@ const movimentoReduzido = window.matchMedia('(prefers-reduced-motion: reduce)').
 ============================================================ */
 const Cabecalho = {
   init() {
-    const cabecalho = $('#cabecalho');
+    const cabecalho = qs('#cabecalho');
     if (!cabecalho) return;
 
     const atualizar = () => {
@@ -47,14 +50,14 @@ const Cabecalho = {
 ============================================================ */
 const MenuMobile = {
   init() {
-    this.botao = $('.menu-toggle');
-    this.painel = $('#menu');
+    this.botao = qs('.menu-toggle');
+    this.painel = qs('#menu');
     if (!this.botao || !this.painel) return;
 
     this.botao.addEventListener('click', () => this.alternar());
 
     // Fecha ao clicar em qualquer link do menu
-    $$('a', this.painel).forEach((link) => {
+    qsa('a', this.painel).forEach((link) => {
       link.addEventListener('click', () => this.fechar());
     });
 
@@ -95,7 +98,7 @@ const MenuMobile = {
 ============================================================ */
 const ScrollReveal = {
   init() {
-    const elementos = $$('[data-reveal]');
+    const elementos = qsa('[data-reveal]');
     if (elementos.length === 0) return;
 
     // Sem suporte ou com movimento reduzido: mostra tudo de imediato
@@ -125,8 +128,8 @@ const ScrollReveal = {
 ============================================================ */
 const NavegacaoAtiva = {
   init() {
-    const secoes = $$('main section[id]');
-    const links = $$('.navegacao__link');
+    const secoes = qsa('main section[id]');
+    const links = qsa('.navegacao__link');
     if (secoes.length === 0 || links.length === 0) return;
 
     const observador = new IntersectionObserver(
@@ -152,7 +155,7 @@ const NavegacaoAtiva = {
 ============================================================ */
 const Rodape = {
   init() {
-    const ano = $('#ano-atual');
+    const ano = qs('#ano-atual');
     if (ano) ano.textContent = new Date().getFullYear();
   },
 };
