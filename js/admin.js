@@ -480,7 +480,7 @@ const Agenda = {
       </div>
       <div class="bloco-agendamento__corpo">
         <strong>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)}</strong>
-        <span>${escaparHtml(serv.nomes)} · ${escaparHtml(celular)}${semConta}</span>
+        <span>${escaparHtml(serv.nomes)} · ${escaparHtml(celular)}${celular !== 'sem celular' ? ` <a class="link-whatsapp" href="https://wa.me/55${celular.replace(/\D/g, '')}" target="_blank" rel="noopener" title="Chamar no WhatsApp">📲</a>` : ''}${semConta}</span>
       </div>
       <div class="bloco-agendamento__rodape">
         ${blocoValor}

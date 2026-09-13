@@ -2158,3 +2158,5 @@ input[type="datetime-local"] {
     font-size: 0.875rem;
   }
 }
+
+.link-whatsapp { text-decoration: none; }

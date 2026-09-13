@@ -841,17 +841,20 @@ const Agendamento = {
       slots.push({ data: new Date(inicio), fragmenta });
     }
 
-    // Horários que não deixam buraco morto vêm primeiro — sem tirar nenhuma
-    // opção da lista, só sugerindo os que aproveitam melhor a agenda do Daniel.
-    slots.sort((a, b) => a.fragmenta - b.fragmenta || a.data - b.data);
+    // Daniel prefere perder a chance de um cliente que só serve naquele
+    // horário a ficar com um buraco morto no dia — então os horários que
+    // fragmentam a agenda são removidos, não só reordenados. Exceção: se
+    // sobrar só horário ruim, oferece mesmo assim (nada é pior que nada).
+    const semBuraco = slots.filter((s) => !s.fragmenta);
+    const finais = (semBuraco.length ? semBuraco : slots).sort((a, b) => a.data - b.data);
 
-    if (slots.length === 0) {
+    if (finais.length === 0) {
       area.innerHTML = '<p class="app-aviso-passo">Nenhum horário livre neste dia. Escolha outro dia.</p>';
       return;
     }
 
-    area.innerHTML = slots
-      .map(({ data, fragmenta }) => `<button class="opcao-horario${fragmenta ? ' opcao-horario--fragmenta' : ''}" type="button" data-iso="${data.toISOString()}">${formatarHora(data.toISOString())}</button>`)
+    area.innerHTML = finais
+      .map(({ data }) => `<button class="opcao-horario" type="button" data-iso="${data.toISOString()}">${formatarHora(data.toISOString())}</button>`)
       .join('');
 
     $$('.opcao-horario', area).forEach((botao) => {
