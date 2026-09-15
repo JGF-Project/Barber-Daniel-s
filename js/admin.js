@@ -389,7 +389,7 @@ const Agenda = {
     const inicioDia = new Date(`${this.dia}T00:00:00${OFFSET}`);
     const fimDia = new Date(inicioDia.getTime() + 86400000);
 
-    const [agendamentosRes, horarioRes] = await Promise.all([
+    const [agendamentosRes, horarioRes, bloqueiosRes] = await Promise.all([
       sb.from('agendamentos')
         .select('id, inicio, fim, status, via_assinatura, valor_centavos, cliente_nome, cliente_celular, agendamento_servicos(servicos(nome, preco_centavos)), perfis(nome, celular)')
         .eq('barbearia_id', BARBEARIA_ID)
@@ -399,6 +399,10 @@ const Agenda = {
         .lt('inicio', fimDia.toISOString())
         .order('inicio', { ascending: true }),
       sb.from('horarios_funcionamento').select('*').eq('barbeiro_id', barbeiroId).eq('dia_semana', diaSemana).maybeSingle(),
+      sb.from('bloqueios').select('id, inicio, fim, motivo')
+        .eq('barbeiro_id', barbeiroId)
+        .lt('inicio', fimDia.toISOString())
+        .gt('fim', inicioDia.toISOString()),
     ]);
 
     if (agendamentosRes.error || horarioRes.error) {
@@ -406,7 +410,7 @@ const Agenda = {
       return;
     }
 
-    area.innerHTML = this.montarLinhaDoTempo(agendamentosRes.data, horarioRes.data);
+    area.innerHTML = this.montarLinhaDoTempo(agendamentosRes.data, horarioRes.data, bloqueiosRes.data || []);
     this.ligarAcoes(area);
   },
 
@@ -456,17 +460,18 @@ const Agenda = {
   /** Monta a coluna: uma linha de hora cheia para cada hora do expediente (10:00, 11:00, 12:00…),
    * igual ao app de referência do Daniel — não só nas horas em que algo começa. Atendimentos
    * agrupados na hora em que começam; hora sem nada começando nela fica em branco. */
-  montarLinhaDoTempo(agendamentos, horario) {
+  montarLinhaDoTempo(agendamentos, horario, bloqueios = []) {
     if (!horario || horario.fechado || !horario.abre || !horario.fecha) {
       return '<p class="app-aviso-passo">O barbeiro não atende neste dia.</p>';
     }
 
     const abre = new Date(`${this.dia}T${horario.abre}${OFFSET}`).getTime();
     const fecha = new Date(`${this.dia}T${horario.fecha}${OFFSET}`).getTime();
-    const eventos = agendamentos.map((a) => ({
-      agendamento: a,
-      inicio: new Date(a.inicio).getTime(),
-    }));
+    // Atendimentos e horários fechados dividem a mesma linha do tempo, na ordem do relógio.
+    const eventos = [
+      ...agendamentos.map((a) => ({ agendamento: a, inicio: new Date(a.inicio).getTime() })),
+      ...bloqueios.map((b) => ({ bloqueio: b, inicio: new Date(b.inicio).getTime() })),
+    ].sort((x, y) => x.inicio - y.inicio);
 
     // Fuso da barbearia é fixo (-03:00, Brasil não tem mais horário de verão — ver supabase.js),
     // então "hora cheia local" dá pra calcular só deslocando o epoch, sem Intl por linha.
@@ -485,11 +490,27 @@ const Agenda = {
         continue;
       }
       doHora.forEach((ev, i) => {
-        linhas.push(`<span class="linha-tempo__hora">${i === 0 ? rotulo : ''}</span>${this.blocoAgendamento(ev.agendamento)}`);
+        const bloco = ev.bloqueio ? this.blocoFechado(ev.bloqueio) : this.blocoAgendamento(ev.agendamento);
+        linhas.push(`<span class="linha-tempo__hora">${i === 0 ? rotulo : ''}</span>${bloco}`);
       });
     }
 
     return `<div class="linha-tempo">${linhas.join('')}</div>`;
+  },
+
+  /** Faixa listrada de "Horário fechado" — o que o cadeado cria. */
+  blocoFechado(b) {
+    return `
+    <article class="bloco-fechado" data-bloqueio="${b.id}">
+      <div class="bloco-fechado__topo">
+        <span class="bloco-agendamento__hora">${formatarHora(b.inicio)} – ${formatarHora(b.fim)}</span>
+        <button class="acao-apagar acao-reabrir" type="button" aria-label="Reabrir este horário" title="Reabrir este horário">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V6"/><path d="M10 11v6M14 11v6"/></svg>
+        </button>
+      </div>
+      <strong class="bloco-fechado__titulo">Horário fechado</strong>
+      ${b.motivo ? `<span class="bloco-fechado__motivo">${escaparHtml(b.motivo)}</span>` : ''}
+    </article>`;
   },
 
   blocoAgendamento(a) {
@@ -558,6 +579,23 @@ const Agenda = {
           : `Valor atualizado para ${formatarPreco(centavos)}.`);
         this.carregar();
         Relatorios.carregar(); // faturamento acompanha o valor editado
+      });
+    });
+
+    // Reabrir um horário que o cadeado fechou
+    $$('.acao-reabrir', area).forEach((b) => {
+      b.addEventListener('click', async () => {
+        const id = b.closest('[data-bloqueio]').dataset.bloqueio;
+        const ok = await confirmar({
+          titulo: 'Reabrir este horário?',
+          texto: 'Ele volta a aparecer como livre para os clientes agendarem.',
+          confirmarLabel: 'Sim, reabrir',
+        });
+        if (!ok) return;
+        const { error } = await sb.from('bloqueios').delete().eq('id', id);
+        if (error) return feedback('Não foi possível reabrir.', 'erro');
+        feedback('Horário reaberto.');
+        this.carregar();
       });
     });
 
@@ -1871,11 +1909,318 @@ function estilizarSelect(select) {
 /* ============================================================
    INICIALIZAÇÃO
 ============================================================ */
+/* ============================================================
+   JANELAS LIVRES + FAIXA DESLIZANTE
+   Base do "Fechar agenda" e do "Modo livre": as duas telas primeiro
+   perguntam em qual buraco da agenda mexer, depois deixam arrastar o
+   início e o fim dentro dele.
+============================================================ */
+const PASSO_FAIXA_MS = 5 * 60000; // 5 min: o Daniel encaixa em janelas curtas
+const PASSO_MINUTOS_ADMIN = 30;   // mesma grade base da tela do cliente
+
+/** Intervalos livres do barbeiro no dia, já descontando almoço, bloqueios e agendamentos. */
+async function janelasLivres(barbeiroId, ymd) {
+  const diaSemana = new Date(`${ymd}T12:00:00Z`).getUTCDay();
+  const [ocupadosRes, horarioRes] = await Promise.all([
+    sb.rpc('horarios_ocupados', { dia: ymd, barbeiro: barbeiroId }),
+    sb.from('horarios_funcionamento').select('abre, fecha, fechado')
+      .eq('barbeiro_id', barbeiroId).eq('dia_semana', diaSemana).maybeSingle(),
+  ]);
+
+  const h = horarioRes.data;
+  if (ocupadosRes.error || horarioRes.error || !h || h.fechado || !h.abre || !h.fecha) return [];
+
+  const abre = new Date(`${ymd}T${h.abre}${OFFSET}`).getTime();
+  const fecha = new Date(`${ymd}T${h.fecha}${OFFSET}`).getTime();
+  const ocupados = (ocupadosRes.data || [])
+    .map((o) => ({ inicio: new Date(o.inicio).getTime(), fim: new Date(o.fim).getTime() }))
+    .sort((a, b) => a.inicio - b.inicio);
+
+  const janelas = [];
+  let cursor = abre;
+  for (const o of ocupados) {
+    if (o.inicio > cursor) janelas.push({ inicio: cursor, fim: Math.min(o.inicio, fecha) });
+    cursor = Math.max(cursor, o.fim);
+  }
+  if (cursor < fecha) janelas.push({ inicio: cursor, fim: fecha });
+
+  // Janelas menores que um passo não dão para encaixar nada.
+  return janelas.filter((j) => j.fim - j.inicio >= PASSO_FAIXA_MS);
+}
+
+const soHora = (ms) => formatarHora(new Date(ms).toISOString());
+
+/**
+ * Liga dois <input type="range"> como uma faixa de início/fim dentro de uma
+ * janela. Devolve { definirJanela, ler } — `ler` dá os dois instantes em ms.
+ */
+function faixaDeslizante({ de, ate, mostrador }) {
+  let base = 0;
+  const sincronizar = () => {
+    // Não deixa as bolinhas se cruzarem: cada uma empurra a outra um passo.
+    if (+de.value >= +ate.value) {
+      if (document.activeElement === de) de.value = +ate.value - 1;
+      else ate.value = +de.value + 1;
+    }
+    mostrador.textContent = `${soHora(base + +de.value * PASSO_FAIXA_MS)} às ${soHora(base + +ate.value * PASSO_FAIXA_MS)}`;
+  };
+
+  de.addEventListener('input', sincronizar);
+  ate.addEventListener('input', sincronizar);
+
+  return {
+    definirJanela(janela) {
+      base = janela.inicio;
+      const passos = Math.round((janela.fim - janela.inicio) / PASSO_FAIXA_MS);
+      [de, ate].forEach((el) => { el.min = 0; el.max = passos; el.step = 1; });
+      de.value = 0;
+      ate.value = passos;
+      sincronizar();
+    },
+    ler() {
+      return {
+        inicio: new Date(base + +de.value * PASSO_FAIXA_MS),
+        fim: new Date(base + +ate.value * PASSO_FAIXA_MS),
+      };
+    },
+  };
+}
+
+/** Preenche um <select> com as janelas livres e devolve a lista. */
+async function preencherJanelas(select, barbeiroId, ymd) {
+  const janelas = await janelasLivres(barbeiroId, ymd);
+  select.innerHTML = janelas.length
+    ? janelas.map((j, i) => `<option value="${i}">${soHora(j.inicio)} - ${soHora(j.fim)}</option>`).join('')
+    : '<option value="">Nenhum horário livre neste dia</option>';
+  return janelas;
+}
+
+/* ============================================================
+   FECHAR AGENDA — o cadeado da barra inferior
+============================================================ */
+const FecharAgenda = {
+  janelas: [],
+
+  init() {
+    this.modal = $('#modal-fechar');
+    this.data = $('#fechar-data');
+    this.select = $('#fechar-janela');
+    this.erro = $('#erro-fechar');
+    this.faixa = faixaDeslizante({ de: $('#fechar-de'), ate: $('#fechar-ate'), mostrador: $('#fechar-valor') });
+
+    $('#agenda-fechar-horario').addEventListener('click', () => this.abrir());
+    $$('[data-fechar-bloqueio]').forEach((el) => el.addEventListener('click', () => this.fechar()));
+    this.data.addEventListener('change', () => this.recarregar());
+    this.select.addEventListener('change', () => {
+      const j = this.janelas[+this.select.value];
+      if (j) this.faixa.definirJanela(j);
+    });
+    $('#form-fechar').addEventListener('submit', (e) => this.salvar(e));
+  },
+
+  async abrir() {
+    this.erro.hidden = true;
+    this.data.value = Agenda.dia;
+    this.modal.hidden = false;
+    await this.recarregar();
+  },
+
+  fechar() { this.modal.hidden = true; },
+
+  async recarregar() {
+    this.select.innerHTML = '<option>Carregando…</option>';
+    this.janelas = await preencherJanelas(this.select, $('#agenda-barbeiro').value, this.data.value);
+    if (this.janelas.length) this.faixa.definirJanela(this.janelas[0]);
+  },
+
+  async salvar(evento) {
+    evento.preventDefault();
+    this.erro.hidden = true;
+
+    const janela = this.janelas[+this.select.value];
+    if (!janela) return this.mostrarErro('Escolha um intervalo livre.');
+
+    const { inicio, fim } = this.faixa.ler();
+    if (fim <= inicio) return this.mostrarErro('O fim precisa ser depois do início.');
+
+    const { error } = await sb.from('bloqueios').insert({
+      barbeiro_id: $('#agenda-barbeiro').value,
+      barbearia_id: BARBEARIA_ID,
+      inicio: inicio.toISOString(),
+      fim: fim.toISOString(),
+      motivo: $('#fechar-motivo').value.trim() || null,
+    });
+    if (error) return this.mostrarErro('Não foi possível fechar esse horário.');
+
+    $('#fechar-motivo').value = '';
+    this.fechar();
+    feedback(`Horário fechado: ${soHora(inicio)} às ${soHora(fim)}.`);
+    Agenda.carregar();
+  },
+
+  mostrarErro(texto) {
+    this.erro.textContent = texto;
+    this.erro.hidden = false;
+  },
+};
+
+/* ============================================================
+   NOVO AGENDAMENTO — encaixe feito pelo próprio barbeiro
+============================================================ */
+const NovoAgendamento = {
+  servicos: [],
+  janelas: [],
+  livre: null, // {inicio, fim} quando o barbeiro usou o Modo livre
+
+  init() {
+    this.modal = $('#modal-novo');
+    this.data = $('#novo-data');
+    this.servico = $('#novo-servico');
+    this.horario = $('#novo-horario');
+    this.aviso = $('#novo-aviso-livre');
+    this.erro = $('#erro-novo');
+
+    this.modalLivre = $('#modal-livre');
+    this.selectLivre = $('#livre-janela');
+    this.faixaLivre = faixaDeslizante({ de: $('#livre-de'), ate: $('#livre-ate'), mostrador: $('#livre-valor') });
+
+    $('#agenda-novo').addEventListener('click', () => this.abrir());
+    $$('[data-fechar-novo]').forEach((el) => el.addEventListener('click', () => this.fechar()));
+    $$('[data-fechar-livre]').forEach((el) => el.addEventListener('click', () => { this.modalLivre.hidden = true; }));
+
+    this.data.addEventListener('change', () => this.recarregarHorarios());
+    this.servico.addEventListener('change', () => this.recarregarHorarios());
+    this.horario.addEventListener('change', () => this.limparLivre());
+
+    $('#novo-celular').addEventListener('input', (e) => { e.target.value = mascararCelular(e.target.value); });
+    $('#novo-livre').addEventListener('click', () => this.abrirLivre());
+    $('#form-livre').addEventListener('submit', (e) => this.confirmarLivre(e));
+    $('#form-novo-agendamento').addEventListener('submit', (e) => this.salvar(e));
+
+    this.selectLivre.addEventListener('change', () => {
+      const j = this.janelas[+this.selectLivre.value];
+      if (j) this.faixaLivre.definirJanela(j);
+    });
+  },
+
+  async abrir() {
+    this.erro.hidden = true;
+    this.limparLivre();
+    $('#novo-cliente').value = '';
+    $('#novo-celular').value = '';
+    this.data.value = Agenda.dia;
+    this.modal.hidden = false;
+
+    if (!this.servicos.length) {
+      const { data } = await sb.from('servicos').select('id, nome, duracao_min')
+        .eq('barbearia_id', BARBEARIA_ID).eq('ativo', true).eq('assinatura', false)
+        .order('ordem', { ascending: true, nullsFirst: false });
+      this.servicos = data || [];
+      this.servico.innerHTML = this.servicos
+        .map((s) => `<option value="${s.id}">${escaparHtml(s.nome)} · ${s.duracao_min}min</option>`).join('');
+    }
+    await this.recarregarHorarios();
+  },
+
+  fechar() { this.modal.hidden = true; },
+
+  limparLivre() {
+    this.livre = null;
+    this.aviso.hidden = true;
+    this.horario.disabled = false;
+  },
+
+  /** Horários livres para o serviço escolhido — exatamente a mesma regra da
+   * tela do cliente (js/slots.js), então o barbeiro vê a agenda como ela é.
+   * Para qualquer coisa fora dessa grade existe o botão Livre. */
+  async recarregarHorarios() {
+    this.limparLivre();
+    this.horario.innerHTML = '<option>Carregando…</option>';
+
+    const servico = this.servicos.find((s) => s.id === this.servico.value);
+    const barbeiroId = $('#agenda-barbeiro').value;
+    this.janelas = await janelasLivres(barbeiroId, this.data.value);
+
+    if (!servico) { this.horario.innerHTML = '<option value="">Escolha um serviço</option>'; return; }
+
+    // As janelas livres já descontaram almoço, bloqueios e agendamentos, então
+    // aqui elas entram como "um expediente sem nada ocupado" para a mesma função.
+    const candidatos = this.janelas.map((j) => ({ abre: j.inicio, fecha: j.fim, ocupados: [] }));
+    const duracoes = this.servicos.map((s) => s.duracao_min);
+    const contagem = new Map();
+    duracoes.forEach((d) => contagem.set(d, (contagem.get(d) || 0) + 1));
+    const tipicaMs = contagem.size ? [...contagem.entries()].reduce((a, b) => (b[1] > a[1] ? b : a))[0] * 60000 : 0;
+
+    const inicios = candidatos.flatMap((c) => calcularSlotsLivres([c], {
+      duracaoMs: servico.duracao_min * 60000,
+      agora: 0, // o barbeiro encaixa na hora; antecedência é regra do cliente
+      duracaoTipicaMs: tipicaMs,
+      passoMs: PASSO_MINUTOS_ADMIN * 60000,
+    })).sort((a, b) => a - b);
+
+    this.horario.innerHTML = inicios.length
+      ? inicios.map((t) => `<option value="${t}">${soHora(t)}</option>`).join('')
+      : '<option value="">Sem encaixe neste dia — use o Livre</option>';
+  },
+
+  async abrirLivre() {
+    if (!this.janelas.length) return this.mostrarErro('Não há intervalo livre neste dia.');
+    this.selectLivre.innerHTML = this.janelas
+      .map((j, i) => `<option value="${i}">${soHora(j.inicio)} - ${soHora(j.fim)}</option>`).join('');
+    this.faixaLivre.definirJanela(this.janelas[0]);
+    this.modalLivre.hidden = false;
+  },
+
+  confirmarLivre(evento) {
+    evento.preventDefault();
+    this.livre = this.faixaLivre.ler();
+    this.modalLivre.hidden = true;
+    this.aviso.hidden = false;
+    this.aviso.textContent = `Modo livre: ${soHora(this.livre.inicio)} às ${soHora(this.livre.fim)}.`;
+    this.horario.disabled = true;
+  },
+
+  async salvar(evento) {
+    evento.preventDefault();
+    this.erro.hidden = true;
+
+    const nome = $('#novo-cliente').value.trim();
+    if (!nome) return this.mostrarErro('Informe o nome do cliente.');
+    if (!this.servico.value) return this.mostrarErro('Escolha um serviço.');
+
+    // No modo livre o fim vem da barra; senão, é a duração do serviço.
+    const inicio = this.livre ? this.livre.inicio : new Date(+this.horario.value);
+    if (!this.livre && !this.horario.value) return this.mostrarErro('Escolha um horário ou use o Livre.');
+
+    const { error } = await sb.rpc('admin_criar_agendamento', {
+      p_barbeiro: $('#agenda-barbeiro').value,
+      p_servico_ids: [this.servico.value],
+      p_inicio: inicio.toISOString(),
+      p_nome: nome,
+      p_celular: $('#novo-celular').value.trim() || null,
+      p_fim: this.livre ? this.livre.fim.toISOString() : null,
+    });
+    if (error) return this.mostrarErro(error.message || 'Não foi possível agendar.');
+
+    this.fechar();
+    feedback(`${nome} agendado para ${soHora(inicio)}.`);
+    Agenda.dia = this.data.value;
+    Agenda.carregar();
+  },
+
+  mostrarErro(texto) {
+    this.erro.textContent = texto;
+    this.erro.hidden = false;
+  },
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   $('#ano-atual').textContent = new Date().getFullYear();
   AbasAdmin.init();
   MenuPainel.init();
   Agenda.init();
+  FecharAgenda.init();
+  NovoAgendamento.init();
   Relatorios.init();
   Servicos.init();
   Assinantes.init();
@@ -1885,6 +2230,7 @@ document.addEventListener('DOMContentLoaded', () => {
   AuthAdmin.init();
 
   // Dropdowns estilizados em todos os seletores do painel
-  ['#agenda-barbeiro', '#horarios-barbeiro', '#relatorios-barbeiro', '#ausencias-barbeiro', '#assinante-plano']
+  ['#agenda-barbeiro', '#horarios-barbeiro', '#relatorios-barbeiro', '#ausencias-barbeiro', '#assinante-plano',
+   '#fechar-janela', '#novo-servico', '#novo-horario', '#livre-janela']
     .forEach((sel) => { const el = $(sel); if (el) estilizarSelect(el); });
 });

@@ -5,7 +5,7 @@
    está oferecendo horário errado (buraco morto, conflito ou horário perdido). */
 
 const assert = require('assert');
-const { calcularSlotsLivres } = require('../js/agendar.js');
+const { calcularSlotsLivres } = require('../js/slots.js');
 
 const DIA = '2026-09-16'; // uma quarta qualquer
 const h = (hhmm) => new Date(`${DIA}T${hhmm}:00-03:00`).getTime();

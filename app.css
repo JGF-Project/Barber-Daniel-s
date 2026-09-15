@@ -2196,3 +2196,172 @@ input[type="datetime-local"] {
 }
 
 .link-whatsapp { text-decoration: none; }
+
+/* ============================================================
+   FECHAR AGENDA E NOVO AGENDAMENTO (painel do barbeiro)
+============================================================ */
+
+/* Modais com formulário são mais altos e alinhados à esquerda */
+.modal__caixa--alta {
+  max-width: 440px;
+  max-height: 90svh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.modal__caixa--alta .modal__titulo,
+.modal__caixa--alta .modal__texto {
+  text-align: center;
+}
+
+.modal__caixa--alta .formulario__campo {
+  margin-bottom: var(--espaco-3);
+}
+
+.modal__texto--livre {
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--raio-pequeno);
+  background: rgba(200, 162, 74, 0.12);
+  border: 1px solid var(--cor-borda-dourada);
+  color: var(--cor-dourado);
+  font-size: 0.875rem;
+}
+
+/* Campo de horário com o botão "Livre" do lado */
+.campo-com-botao {
+  display: flex;
+  gap: var(--espaco-2);
+  align-items: stretch;
+}
+
+.campo-com-botao > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.campo-com-botao .botao {
+  flex-shrink: 0;
+}
+
+/* ---------- Faixa de horas (duas bolinhas sobre um trilho) ---------- */
+.faixa-horas {
+  margin: var(--espaco-4) 0;
+  text-align: center;
+}
+
+.faixa-horas__rotulo {
+  display: block;
+  font-size: 0.8125rem;
+  color: var(--cor-texto-suave);
+}
+
+.faixa-horas__valor {
+  display: block;
+  margin-bottom: var(--espaco-3);
+  font-family: var(--fonte-titulo);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--cor-branco);
+}
+
+.faixa-horas__dica {
+  display: block;
+  margin-top: var(--espaco-2);
+  font-size: 0.75rem;
+  color: var(--cor-texto-suave);
+}
+
+/* As duas bolinhas dividem o mesmo trilho: a segunda fica por cima da
+   primeira, ambas transparentes, e o trilho visível é o do container. */
+.faixa-horas__trilho {
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.faixa-horas__trilho::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--cor-dourado);
+  opacity: 0.55;
+}
+
+.faixa-horas__trilho input[type="range"] {
+  position: absolute;
+  inset-inline: 0;
+  width: 100%;
+  margin: 0;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: none; /* só as bolinhas recebem o toque */
+}
+
+.faixa-horas__trilho input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--cor-branco);
+  border: 2px solid var(--cor-dourado);
+  cursor: grab;
+  pointer-events: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.faixa-horas__trilho input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--cor-branco);
+  border: 2px solid var(--cor-dourado);
+  cursor: grab;
+  pointer-events: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.faixa-horas__trilho input[type="range"]::-moz-range-track {
+  background: none;
+}
+
+/* ---------- Bloco "Horário fechado" na agenda ---------- */
+.bloco-fechado {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: var(--espaco-3);
+  border-radius: var(--raio-pequeno);
+  border: 1px dashed var(--cor-borda);
+  color: var(--cor-texto-suave);
+  /* Listras: o mesmo jeito do app que o Daniel usa hoje para marcar o que está fechado */
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.05) 8px,
+    transparent 8px,
+    transparent 16px
+  );
+}
+
+.bloco-fechado__topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espaco-2);
+}
+
+.bloco-fechado__titulo {
+  font-family: var(--fonte-titulo);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--cor-texto);
+}
+
+.bloco-fechado__motivo {
+  font-size: 0.8125rem;
+}
