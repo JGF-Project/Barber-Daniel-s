@@ -2107,6 +2107,12 @@ input[type="datetime-local"] {
   z-index: 1100;
   max-height: 260px;
   overflow-y: auto;
+  /* Sem isso, arrastar até o fim da lista e continuar "repassa" o gesto pra
+     página por trás — no iPhone isso gera um scroll no <html> mesmo com o
+     body travado, e esse scroll é o que fecha a lista (o mesmo listener que
+     fecha ao tocar fora dela). overscroll-behavior:contain trava o gesto
+     dentro da própria lista, sem vazar pro resto da página. */
+  overscroll-behavior: contain;
   padding: 0.375rem;
   background: var(--cor-fundo-alt);
   border: 1px solid var(--cor-borda-dourada);
