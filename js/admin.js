@@ -1746,6 +1746,13 @@ const Relatorios = {
 ============================================================ */
 const AbasAdmin = {
   init() {
+    // Logo do cabeçalho volta pra Agenda em vez de sair do painel — é a área
+    // de trabalho do Daniel, ele não quer perder o painel sem querer.
+    $('#logo-painel')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      $('#aba-agenda').click();
+    });
+
     const mapa = {
       agenda: 'painel-agenda',
       relatorios: 'painel-relatorios',
