@@ -1159,17 +1159,26 @@
 }
 
 /* Hora sem nada começando nela, mas ainda ocupada por um atendimento que vem
-   de antes — diferente de .linha-tempo__vazio de propósito, para não passar
-   a impressão de horário livre numa olhada rápida. */
+   de antes — diferente de .linha-tempo__vazio de propósito, e grande o
+   suficiente pro Daniel bater o olho no meio de um corte e responder na
+   hora se tem horário livre, sem precisar parar pra ler com calma. */
 .linha-tempo__continuacao {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   min-height: 2.5rem;
-  padding-left: var(--espaco-3);
-  border-left: 2px dashed var(--cor-borda);
-  font-size: 0.8125rem;
-  font-style: italic;
-  color: var(--cor-texto-suave);
+  padding: 0.625rem var(--espaco-3);
+  border-left: 3px solid var(--cor-dourado);
+  border-radius: var(--raio-pequeno);
+  background: rgba(200, 162, 74, 0.08);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--cor-branco);
+}
+
+.linha-tempo__continuacao::before {
+  content: '🔒';
+  font-size: 0.9em;
 }
 
 .bloco-agendamento {
