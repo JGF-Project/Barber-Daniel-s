@@ -2418,7 +2418,12 @@ const Notificacoes = {
     if (!botao || !this.suportado()) return;
     const registro = await navigator.serviceWorker.ready.catch(() => null);
     const inscricao = registro ? await registro.pushManager.getSubscription() : null;
-    botao.textContent = inscricao ? '🔔 Notificações ativas' : '🔔 Ativar notificações';
+    // O ícone mostra a AÇÃO do clique, não o estado: ativas → sino cortado
+    // (clicar desativa); inativas → sino normal (clicar ativa).
+    botao.textContent = inscricao ? '🔕' : '🔔';
+    const rotulo = inscricao ? 'Desativar notificações de novos agendamentos' : 'Ativar notificações de novos agendamentos';
+    botao.title = rotulo;
+    botao.setAttribute('aria-label', rotulo);
     botao.classList.toggle('botao--ativo', !!inscricao);
   },
 

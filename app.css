@@ -1561,6 +1561,10 @@ input[type="datetime-local"] {
   align-items: center;
   justify-content: center;
   padding: var(--espaco-3);
+  /* Blindagem extra pro scroll lateral: mesmo que algo dentro do modal
+     vaze mais largo que a tela (texto longo, teclado abrindo no iPhone),
+     não deixa a página inteira ser arrastada de lado por causa disso. */
+  overflow-x: hidden;
 }
 
 .modal__fundo {
@@ -1581,6 +1585,7 @@ input[type="datetime-local"] {
   text-align: center;
   box-shadow: var(--sombra-suave);
   animation: modal-entra 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  overflow-x: hidden;
 }
 
 .modal__icone {
@@ -2393,8 +2398,30 @@ input[type="datetime-local"] {
   font-size: 0.8125rem;
 }
 
-/* Botão de notificações no cabeçalho, quando já ativadas */
-#botao-notificacoes.botao--ativo {
+/* Botão de notificações no cabeçalho: só o ícone, circular e pequeno —
+   sem texto do lado pra não brigar por espaço com o nome/Sair. */
+.botao-notificacoes {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--cor-borda);
+  font-size: 1.0625rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color var(--transicao-rapida), background var(--transicao-rapida);
+}
+
+.botao-notificacoes:hover {
+  border-color: var(--cor-borda-dourada);
+}
+
+.botao-notificacoes.botao--ativo {
   border-color: var(--cor-dourado);
-  color: var(--cor-dourado);
+  background: rgba(200, 162, 74, 0.12);
 }
