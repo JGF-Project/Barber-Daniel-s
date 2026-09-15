@@ -2119,12 +2119,20 @@ const FecharAgenda = {
 ============================================================ */
 const NovoAgendamento = {
   servicos: [],
+  assinantes: [],
   janelas: [],
   livre: null, // {inicio, fim} quando o barbeiro usou o Modo livre
 
   init() {
     this.modal = $('#modal-novo');
     this.data = $('#novo-data');
+    this.assinanteSelect = $('#novo-assinante');
+    this.avisoSemConta = $('#novo-aviso-sem-conta');
+    this.campoCliente = $('#campo-novo-cliente');
+    this.campoCelular = $('#campo-novo-celular');
+    this.campoServico = $('#campo-novo-servico');
+    this.nomeInput = $('#novo-cliente');
+    this.celularInput = $('#novo-celular');
     this.servico = $('#novo-servico');
     this.horario = $('#novo-horario');
     this.aviso = $('#novo-aviso-livre');
@@ -2138,11 +2146,12 @@ const NovoAgendamento = {
     $$('[data-fechar-novo]').forEach((el) => el.addEventListener('click', () => this.fechar()));
     $$('[data-fechar-livre]').forEach((el) => el.addEventListener('click', () => { this.modalLivre.hidden = true; }));
 
+    this.assinanteSelect.addEventListener('change', () => this.alternarAssinante());
     this.data.addEventListener('change', () => this.recarregarHorarios());
     this.servico.addEventListener('change', () => this.recarregarHorarios());
     this.horario.addEventListener('change', () => this.limparLivre());
 
-    $('#novo-celular').addEventListener('input', (e) => { e.target.value = mascararCelular(e.target.value); });
+    this.celularInput.addEventListener('input', (e) => { e.target.value = mascararCelular(e.target.value); });
     $('#novo-livre').addEventListener('click', () => this.abrirLivre());
     $('#form-livre').addEventListener('submit', (e) => this.confirmarLivre(e));
     $('#form-novo-agendamento').addEventListener('submit', (e) => this.salvar(e));
@@ -2156,8 +2165,8 @@ const NovoAgendamento = {
   async abrir() {
     this.erro.hidden = true;
     this.limparLivre();
-    $('#novo-cliente').value = '';
-    $('#novo-celular').value = '';
+    this.nomeInput.value = '';
+    this.celularInput.value = '';
     this.data.value = Agenda.dia;
     this.modal.hidden = false;
 
@@ -2169,7 +2178,17 @@ const NovoAgendamento = {
       this.servico.innerHTML = this.servicos
         .map((s) => `<option value="${s.id}">${escaparHtml(s.nome)} · ${s.duracao_min}min</option>`).join('');
     }
-    await this.recarregarHorarios();
+    if (!this.assinantes.length) {
+      const { data } = await sb.rpc('assinantes_admin', { p_barbearia: BARBEARIA_ID });
+      this.assinantes = data || [];
+    }
+    // Reconstrói o <select> (não só o .value) toda vez que o modal abre: o
+    // menu customizado (estilizarSelect) só atualiza o botão visível quando
+    // as opções mudam de verdade — só trocar o .value deixaria o botão
+    // mostrando o nome do assinante da última vez que o painel foi aberto.
+    this.assinanteSelect.innerHTML = '<option value="">— Cliente avulso —</option>' + this.assinantes
+      .map((a) => `<option value="${a.id}">${escaparHtml(a.nome || a.email)} — ${escaparHtml(a.plano)}</option>`).join('');
+    this.alternarAssinante();
   },
 
   fechar() { this.modal.hidden = true; },
@@ -2180,18 +2199,73 @@ const NovoAgendamento = {
     this.horario.disabled = false;
   },
 
-  /** Horários livres para o serviço escolhido — exatamente a mesma regra da
+  /** Assinante escolhido no seletor, ou null se for cliente avulso. */
+  assinanteAtual() {
+    return this.assinantes.find((a) => a.id === this.assinanteSelect.value) || null;
+  },
+
+  /** Alterna entre os dois modos do formulário: cliente avulso (nome/celular/
+   * serviço digitados) ou um assinante já conhecido (nome vem da conta dele,
+   * serviço é o próprio plano — nem aparece pra escolher). Sem conta ainda,
+   * mostra o aviso na hora em vez de deixar o Daniel preencher tudo e só
+   * descobrir o problema quando o banco recusar. */
+  alternarAssinante() {
+    const a = this.assinanteAtual();
+
+    if (!a) {
+      this.campoCliente.hidden = false;
+      this.campoCelular.hidden = false;
+      this.campoServico.hidden = false;
+      this.avisoSemConta.hidden = true;
+      this.nomeInput.required = true;
+      this.celularInput.required = true;
+      this.nomeInput.readOnly = false;
+      this.nomeInput.value = '';
+      this.recarregarHorarios();
+      return;
+    }
+
+    this.campoServico.hidden = true;
+    this.avisoSemConta.hidden = a.tem_conta;
+    if (!a.tem_conta) {
+      this.avisoSemConta.textContent = `${a.nome || a.email} ainda não criou a conta — peça pra ele entrar no site com o e-mail ${a.email} antes de agendar pelo plano.`;
+    }
+
+    // Com conta, o banco puxa nome/celular sozinho — só mostra pra conferência.
+    this.campoCliente.hidden = !!a.tem_conta;
+    this.campoCelular.hidden = !!a.tem_conta;
+    this.nomeInput.required = !a.tem_conta;
+    this.celularInput.required = !a.tem_conta;
+    if (a.tem_conta) {
+      this.nomeInput.value = a.nome || a.email;
+      this.nomeInput.readOnly = true;
+    } else {
+      this.nomeInput.readOnly = false;
+    }
+
+    this.recarregarHorarios();
+  },
+
+  /** Duração de referência do momento: o serviço avulso escolhido, ou o
+   * tempo do plano do assinante (respeitando o tempo combinado com ele). */
+  duracaoAtualMin() {
+    const a = this.assinanteAtual();
+    if (a) return a.duracao_min ?? a.duracao_padrao;
+    return this.servicos.find((s) => s.id === this.servico.value)?.duracao_min;
+  },
+
+  /** Horários livres para o serviço (ou plano) escolhido — mesma regra da
    * tela do cliente (js/slots.js), então o barbeiro vê a agenda como ela é.
    * Para qualquer coisa fora dessa grade existe o botão Livre. */
   async recarregarHorarios() {
     this.limparLivre();
     this.horario.innerHTML = '<option>Carregando…</option>';
 
-    const servico = this.servicos.find((s) => s.id === this.servico.value);
+    const duracaoMin = this.duracaoAtualMin();
     const barbeiroId = $('#agenda-barbeiro').value;
     this.janelas = await janelasLivres(barbeiroId, this.data.value);
 
-    if (!servico) { this.horario.innerHTML = '<option value="">Escolha um serviço</option>'; return; }
+    if (!duracaoMin) { this.horario.innerHTML = '<option value="">Escolha um serviço</option>'; return; }
 
     // As janelas livres já descontaram almoço, bloqueios e agendamentos, então
     // aqui elas entram como "um expediente sem nada ocupado" para a mesma função.
@@ -2202,7 +2276,7 @@ const NovoAgendamento = {
     const tipicaMs = contagem.size ? [...contagem.entries()].reduce((a, b) => (b[1] > a[1] ? b : a))[0] * 60000 : 0;
 
     const inicios = candidatos.flatMap((c) => calcularSlotsLivres([c], {
-      duracaoMs: servico.duracao_min * 60000,
+      duracaoMs: duracaoMin * 60000,
       agora: 0, // o barbeiro encaixa na hora; antecedência é regra do cliente
       duracaoTipicaMs: tipicaMs,
       passoMs: PASSO_MINUTOS_ADMIN * 60000,
@@ -2234,26 +2308,32 @@ const NovoAgendamento = {
     evento.preventDefault();
     this.erro.hidden = true;
 
-    const nome = $('#novo-cliente').value.trim();
-    const celular = $('#novo-celular').value.trim();
-    if (!nome) return this.mostrarErro('Informe o nome do cliente.');
-    // O banco exige celular sempre que não há conta vinculada (é o que o
-    // botão de WhatsApp no card do agendamento usa depois) — sem isso o
-    // agendamento seria recusado com um erro sem explicação nenhuma.
-    if (!celular) return this.mostrarErro('Informe o celular do cliente.');
-    if (!this.servico.value) return this.mostrarErro('Escolha um serviço.');
+    const assinante = this.assinanteAtual();
+    if (assinante && !assinante.tem_conta) {
+      return this.mostrarErro('Esse cliente ainda não criou a conta — não dá pra agendar pelo plano até lá.');
+    }
 
-    // No modo livre o fim vem da barra; senão, é a duração do serviço.
+    const nome = this.nomeInput.value.trim();
+    const celular = this.celularInput.value.trim();
+    if (!nome) return this.mostrarErro('Informe o nome do cliente.');
+    // Sem assinante com conta vinculada, o banco exige celular também (é o
+    // que o botão de WhatsApp no card do agendamento usa depois) — sem isso
+    // o agendamento seria recusado com um erro sem explicação nenhuma.
+    if (!assinante && !celular) return this.mostrarErro('Informe o celular do cliente.');
+    if (!assinante && !this.servico.value) return this.mostrarErro('Escolha um serviço.');
+
+    // No modo livre o fim vem da barra; senão, é a duração do serviço/plano.
     const inicio = this.livre ? this.livre.inicio : new Date(+this.horario.value);
     if (!this.livre && !this.horario.value) return this.mostrarErro('Escolha um horário ou use o Livre.');
 
     const { error } = await sb.rpc('admin_criar_agendamento', {
       p_barbeiro: $('#agenda-barbeiro').value,
-      p_servico_ids: [this.servico.value],
+      p_servico_ids: assinante ? [] : [this.servico.value],
       p_inicio: inicio.toISOString(),
-      p_nome: nome,
-      p_celular: celular,
+      p_nome: nome || null,
+      p_celular: celular || null,
       p_fim: this.livre ? this.livre.fim.toISOString() : null,
+      p_assinatura_id: assinante ? assinante.id : null,
     });
     if (error) return this.mostrarErro(error.message || 'Não foi possível agendar.');
 
@@ -2386,6 +2466,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Dropdowns estilizados em todos os seletores do painel
   ['#agenda-barbeiro', '#horarios-barbeiro', '#relatorios-barbeiro', '#ausencias-barbeiro', '#assinante-plano',
-   '#fechar-janela', '#novo-servico', '#novo-horario', '#livre-janela']
+   '#fechar-janela', '#novo-assinante', '#novo-servico', '#novo-horario', '#livre-janela']
     .forEach((sel) => { const el = $(sel); if (el) estilizarSelect(el); });
 });

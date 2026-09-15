@@ -15,7 +15,11 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!-- "black-translucent" deixaria a barra de status por CIMA da página (área
+       transparente) — sem um ajuste de safe-area isso empurra o conteúdo do
+       topo pra baixo do notch/relógio, dando a impressão de "zoom" estranho
+       num iPhone de verdade. "default" mantém a barra sólida e fora do caminho. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Painel ADM">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -460,17 +464,26 @@
       <h2 class="modal__titulo" id="modal-novo-titulo" tabindex="-1">Novo agendamento</h2>
       <p class="modal__texto">Preencha os campos para encaixar um cliente.</p>
 
-      <div class="formulario__campo">
+      <div class="formulario__campo formulario__campo--seletor">
+        <label for="novo-assinante">Cliente do plano?</label>
+        <select id="novo-assinante">
+          <option value="">— Cliente avulso —</option>
+        </select>
+      </div>
+
+      <p class="modal__texto modal__texto--livre" id="novo-aviso-sem-conta" hidden></p>
+
+      <div class="formulario__campo" id="campo-novo-cliente">
         <label for="novo-cliente">Nome do cliente</label>
         <input type="text" id="novo-cliente" placeholder="Nome de quem vai ser atendido" required>
       </div>
 
-      <div class="formulario__campo">
+      <div class="formulario__campo" id="campo-novo-celular">
         <label for="novo-celular">Celular</label>
         <input type="tel" id="novo-celular" inputmode="numeric" placeholder="(13) 99999-0000" autocomplete="off" required>
       </div>
 
-      <div class="formulario__campo formulario__campo--seletor">
+      <div class="formulario__campo formulario__campo--seletor" id="campo-novo-servico">
         <label for="novo-servico">Serviço</label>
         <select id="novo-servico" required></select>
       </div>
@@ -530,6 +543,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js?v=5"></script>
   <script src="js/slots.js?v=1"></script>
-  <script src="js/admin.js?v=31"></script>
+  <script src="js/admin.js?v=32"></script>
 </body>
 </html>
