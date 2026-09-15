@@ -85,6 +85,11 @@ html {
   scroll-behavior: smooth;
   /* Compensa a altura do cabeçalho fixo ao navegar por âncoras */
   scroll-padding-top: 96px;
+  /* Sem isso, o Safari do iPhone pode rolar o <html> (não só o <body>, que
+     já tem overflow-x:hidden) pra lateral ao focar um campo dentro de um
+     modal — e o deslocamento fica "preso" mesmo depois de fechar o modal,
+     dando a impressão de a página inteira ter ficado desalinhada. */
+  overflow-x: hidden;
 }
 
 body {

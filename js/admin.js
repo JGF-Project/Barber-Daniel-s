@@ -149,6 +149,24 @@ function feedback(texto, tipo = 'info') {
 }
 
 /**
+ * Trava a rolagem do fundo enquanto pelo menos um modal está aberto. Usa
+ * contador em vez de um simples on/off: o Modo livre abre por cima do Novo
+ * Agendamento, então fechar o de cima não pode destravar a rolagem enquanto
+ * o de baixo ainda está na tela. Sem isso, no iPhone o corpo da página
+ * continua rolando e clicável por baixo de qualquer modal (o "consigo mexer
+ * no painel por trás" que dá pra sentir no toque, mesmo o modal parecendo
+ * cobrir a tela toda no desktop).
+ */
+let travasRolagem = 0;
+function travarRolagem() {
+  if (travasRolagem++ === 0) document.body.style.overflow = 'hidden';
+}
+function destravarRolagem() {
+  travasRolagem = Math.max(0, travasRolagem - 1);
+  if (travasRolagem === 0) document.body.style.overflow = '';
+}
+
+/**
  * Modal de confirmação dentro do site (substitui window.confirm).
  * Retorna uma Promise que resolve true (confirmar) ou false (voltar/fechar).
  */
@@ -163,10 +181,12 @@ function confirmar({ titulo = 'Tem certeza?', texto = '', confirmarLabel = 'Conf
     btnOk.textContent = confirmarLabel;
 
     modal.hidden = false;
+    travarRolagem();
     $('#modal-titulo').focus(); // foco no diálogo (leitores de tela / Esc)
 
     const encerrar = (resultado) => {
       modal.hidden = true;
+      destravarRolagem();
       btnOk.removeEventListener('click', aoConfirmar);
       fechaveis.forEach((el) => el.removeEventListener('click', aoVoltar));
       document.removeEventListener('keydown', aoTeclar);
@@ -201,11 +221,13 @@ function pedirNumero({ titulo, texto, prefixo, valorInicial, rotuloSalvar, aria,
     input.setAttribute('aria-label', aria);
     input.value = valorInicial;
     modal.hidden = false;
+    travarRolagem();
     input.focus();
     input.select();
 
     const encerrar = (resultado) => {
       modal.hidden = true;
+      destravarRolagem();
       form.removeEventListener('submit', aoSalvar);
       fechaveis.forEach((el) => el.removeEventListener('click', aoVoltar));
       document.removeEventListener('keydown', aoTeclar);
@@ -1848,7 +1870,7 @@ const MenuPainel = {
     this.botao.setAttribute('aria-label', 'Fechar menu');
     this.painel.classList.add('aberta');
     this.fundo?.classList.add('aberta');
-    document.body.style.overflow = 'hidden';
+    travarRolagem();
   },
 
   fechar() {
@@ -1856,7 +1878,7 @@ const MenuPainel = {
     this.botao.setAttribute('aria-label', 'Abrir menu');
     this.painel.classList.remove('aberta');
     this.fundo?.classList.remove('aberta');
-    document.body.style.overflow = '';
+    destravarRolagem();
   },
 };
 
@@ -2072,10 +2094,11 @@ const FecharAgenda = {
     this.erro.hidden = true;
     this.data.value = Agenda.dia;
     this.modal.hidden = false;
+    travarRolagem();
     await this.recarregar();
   },
 
-  fechar() { this.modal.hidden = true; },
+  fechar() { this.modal.hidden = true; destravarRolagem(); },
 
   async recarregar() {
     this.select.innerHTML = '<option>Carregando…</option>';
@@ -2144,7 +2167,7 @@ const NovoAgendamento = {
 
     $('#agenda-novo').addEventListener('click', () => this.abrir());
     $$('[data-fechar-novo]').forEach((el) => el.addEventListener('click', () => this.fechar()));
-    $$('[data-fechar-livre]').forEach((el) => el.addEventListener('click', () => { this.modalLivre.hidden = true; }));
+    $$('[data-fechar-livre]').forEach((el) => el.addEventListener('click', () => { this.modalLivre.hidden = true; destravarRolagem(); }));
 
     this.assinanteSelect.addEventListener('change', () => this.alternarAssinante());
     this.data.addEventListener('change', () => this.recarregarHorarios());
@@ -2169,6 +2192,7 @@ const NovoAgendamento = {
     this.celularInput.value = '';
     this.data.value = Agenda.dia;
     this.modal.hidden = false;
+    travarRolagem();
 
     if (!this.servicos.length) {
       const { data } = await sb.from('servicos').select('id, nome, duracao_min')
@@ -2191,7 +2215,7 @@ const NovoAgendamento = {
     this.alternarAssinante();
   },
 
-  fechar() { this.modal.hidden = true; },
+  fechar() { this.modal.hidden = true; destravarRolagem(); },
 
   limparLivre() {
     this.livre = null;
@@ -2293,12 +2317,14 @@ const NovoAgendamento = {
       .map((j, i) => `<option value="${i}">${soHora(j.inicio)} - ${soHora(j.fim)}</option>`).join('');
     this.faixaLivre.definirJanela(this.janelas[0]);
     this.modalLivre.hidden = false;
+    travarRolagem();
   },
 
   confirmarLivre(evento) {
     evento.preventDefault();
     this.livre = this.faixaLivre.ler();
     this.modalLivre.hidden = true;
+    destravarRolagem();
     this.aviso.hidden = false;
     this.aviso.textContent = `Modo livre: ${soHora(this.livre.inicio)} às ${soHora(this.livre.fim)}.`;
     this.horario.disabled = true;
