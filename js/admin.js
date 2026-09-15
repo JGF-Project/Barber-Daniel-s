@@ -608,6 +608,13 @@ const Agenda = {
     const cliente = a.perfis?.nome || a.cliente_nome || 'Cliente';
     const celular = a.perfis?.celular || a.cliente_celular || 'sem celular';
     const semConta = !a.perfis && a.cliente_nome ? ' · <em>sem cadastro</em>' : '';
+    const diaAgendamento = partesNoFuso(new Date(a.inicio)).ymd;
+    const diaLabel = diaAgendamento === partesNoFuso(new Date()).ymd
+      ? 'hoje'
+      : diaAgendamento === partesNoFuso(new Date(Date.now() + 86400000)).ymd
+        ? 'amanhã'
+        : new Date(a.inicio).toLocaleDateString('pt-BR', { timeZone: FUSO, day: '2-digit', month: '2-digit' });
+    const msgWhats = `*Agendamento realizado com sucesso pelo estabelecimento!*\n\nOlá ${cliente}, tudo bem?\n\nSeu horário *${diaLabel} às ${formatarHora(a.inicio)}* está confirmado!\n\nEm caso de dúvidas, responda a essa mensagem!`;
     // Valor cobrado de fato: o que o barbeiro editou, ou a soma dos serviços.
     const centavos = valorCobrado(a);
     const editado = a.valor_centavos !== null && a.valor_centavos !== undefined;
@@ -630,7 +637,7 @@ const Agenda = {
       </div>
       <div class="bloco-agendamento__corpo">
         <strong>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)}</strong>
-        <span>${escaparHtml(serv.nomes)} · ${escaparHtml(celular)}${celular !== 'sem celular' ? ` <a class="link-whatsapp" href="https://wa.me/55${celular.replace(/\D/g, '')}" target="_blank" rel="noopener" title="Chamar no WhatsApp">📲</a>` : ''}${semConta}</span>
+        <span>${escaparHtml(serv.nomes)} · ${escaparHtml(celular)}${celular !== 'sem celular' ? ` <a class="link-whatsapp" href="https://wa.me/55${celular.replace(/\D/g, '')}?text=${encodeURIComponent(msgWhats)}" target="_blank" rel="noopener" title="Chamar no WhatsApp">📲</a>` : ''}${semConta}</span>
       </div>
       <div class="bloco-agendamento__rodape">
         ${blocoValor}
