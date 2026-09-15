@@ -469,8 +469,8 @@ const Agenda = {
     const fecha = new Date(`${this.dia}T${horario.fecha}${OFFSET}`).getTime();
     // Atendimentos e horários fechados dividem a mesma linha do tempo, na ordem do relógio.
     const eventos = [
-      ...agendamentos.map((a) => ({ agendamento: a, inicio: new Date(a.inicio).getTime() })),
-      ...bloqueios.map((b) => ({ bloqueio: b, inicio: new Date(b.inicio).getTime() })),
+      ...agendamentos.map((a) => ({ agendamento: a, inicio: new Date(a.inicio).getTime(), fim: new Date(a.fim).getTime() })),
+      ...bloqueios.map((b) => ({ bloqueio: b, inicio: new Date(b.inicio).getTime(), fim: new Date(b.fim).getTime() })),
     ].sort((x, y) => x.inicio - y.inicio);
 
     // Fuso da barbearia é fixo (-03:00, Brasil não tem mais horário de verão — ver supabase.js),
@@ -483,10 +483,22 @@ const Agenda = {
     const ultimaHora = horaCheiaLocal(fecha - 1); // fecha é exclusivo: -1ms evita uma hora vazia extra quando fecha cai certinho na hora cheia
     const linhas = [];
     for (let h = primeiraHora; h <= ultimaHora; h++) {
+      const inicioHora = horaParaMs(h);
+      const fimHora = horaParaMs(h + 1);
       const doHora = eventos.filter((ev) => horaCheiaLocal(ev.inicio) === h);
-      const rotulo = formatarHora(new Date(horaParaMs(h)).toISOString());
+      const rotulo = formatarHora(new Date(inicioHora).toISOString());
       if (!doHora.length) {
-        linhas.push(`<span class="linha-tempo__hora">${rotulo}</span><span class="linha-tempo__vazio"></span>`);
+        // Nada COMEÇA nesta hora, mas ela pode não estar livre mesmo assim:
+        // um atendimento iniciado numa hora anterior pode continuar entrando
+        // por aqui (ex.: 18:30–19:30 ocupa a hora das 19h inteira). Mostrar
+        // como vazio ali é exatamente o que gerou o buraco de 50min — o
+        // Daniel olha rápido e confia na hora em branco.
+        const continua = eventos.find((ev) => ev.inicio < fimHora && ev.fim > inicioHora);
+        linhas.push(`<span class="linha-tempo__hora">${rotulo}</span>${
+          continua
+            ? `<span class="linha-tempo__continuacao">Ocupado até ${formatarHora(new Date(continua.fim).toISOString())}</span>`
+            : '<span class="linha-tempo__vazio"></span>'
+        }`);
         continue;
       }
       doHora.forEach((ev, i) => {
