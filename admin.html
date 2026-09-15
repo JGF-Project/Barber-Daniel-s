@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css?v=4">
-  <link rel="stylesheet" href="app.css?v=13">
+  <link rel="stylesheet" href="app.css?v=14">
 </head>
 
 <body class="pagina-app pagina-admin">
@@ -387,21 +387,21 @@
         </svg>
       </span>
       <h2 class="modal__titulo" id="modal-valor-titulo" tabindex="-1">Valor do atendimento</h2>
-      <p class="modal__texto">Informe quanto foi cobrado. Deixe <strong>0</strong> para marcar como falta.</p>
+      <p class="modal__texto" id="modal-valor-texto">Informe quanto foi cobrado. Deixe <strong>0</strong> para marcar como falta.</p>
       <div class="campo-valor">
-        <span class="campo-valor__prefixo" aria-hidden="true">R$</span>
+        <span class="campo-valor__prefixo" id="modal-valor-prefixo" aria-hidden="true">R$</span>
         <input class="campo-valor__input" type="text" id="modal-valor-input" inputmode="decimal"
                autocomplete="off" aria-label="Valor em reais" required>
       </div>
       <div class="modal__acoes">
         <button class="botao botao--fantasma" type="button" data-fechar-valor>Voltar</button>
-        <button class="botao botao--primario" type="submit">Salvar valor</button>
+        <button class="botao botao--primario" type="submit" id="modal-valor-salvar">Salvar valor</button>
       </div>
     </form>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js?v=5"></script>
-  <script src="js/admin.js?v=24"></script>
+  <script src="js/admin.js?v=25"></script>
 </body>
 </html>

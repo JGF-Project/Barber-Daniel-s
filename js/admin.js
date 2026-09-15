@@ -183,19 +183,23 @@ function confirmar({ titulo = 'Tem certeza?', texto = '', confirmarLabel = 'Conf
 }
 
 /**
- * Modal de edição de valor dentro do site (substitui window.prompt, que no
- * celular abre o pop-up feio do navegador). Recebe e devolve CENTAVOS, mas
- * mostra e lê reais — digitar "35,50" é o que o barbeiro espera.
- * Resolve null se ele voltar/fechar.
+ * Modal de um número só, dentro do site (window.prompt no celular abre o
+ * pop-up feio do navegador). Resolve null se o barbeiro voltar/fechar.
+ * `interpretar` recebe o texto digitado e devolve o valor final.
  */
-function pedirValor(centavosAtuais) {
+function pedirNumero({ titulo, texto, prefixo, valorInicial, rotuloSalvar, aria, interpretar }) {
   return new Promise((resolve) => {
     const modal = $('#modal-valor');
     const form = $('#form-valor');
     const input = $('#modal-valor-input');
     const fechaveis = [...modal.querySelectorAll('[data-fechar-valor]')];
 
-    input.value = (centavosAtuais / 100).toFixed(2).replace('.', ',');
+    $('#modal-valor-titulo').textContent = titulo;
+    $('#modal-valor-texto').innerHTML = texto;
+    $('#modal-valor-prefixo').textContent = prefixo;
+    $('#modal-valor-salvar').textContent = rotuloSalvar;
+    input.setAttribute('aria-label', aria);
+    input.value = valorInicial;
     modal.hidden = false;
     input.focus();
     input.select();
@@ -209,9 +213,7 @@ function pedirValor(centavosAtuais) {
     };
     const aoSalvar = (e) => {
       e.preventDefault();
-      // Aceita "35", "35,50" e "35.50"; qualquer lixo vira 0 (= falta).
-      const reais = parseFloat(input.value.replace(/\s/g, '').replace(',', '.'));
-      encerrar(Number.isFinite(reais) && reais > 0 ? Math.round(reais * 100) : 0);
+      encerrar(interpretar(input.value));
     };
     const aoVoltar = () => encerrar(null);
     const aoTeclar = (e) => { if (e.key === 'Escape') encerrar(null); };
@@ -219,6 +221,39 @@ function pedirValor(centavosAtuais) {
     form.addEventListener('submit', aoSalvar);
     fechaveis.forEach((el) => el.addEventListener('click', aoVoltar));
     document.addEventListener('keydown', aoTeclar);
+  });
+}
+
+/** Valor cobrado, em CENTAVOS (mostra e lê reais: "35,50"). 0 = falta. */
+function pedirValor(centavosAtuais) {
+  return pedirNumero({
+    titulo: 'Valor do atendimento',
+    texto: 'Informe quanto foi cobrado. Deixe <strong>0</strong> para marcar como falta.',
+    prefixo: 'R$',
+    valorInicial: (centavosAtuais / 100).toFixed(2).replace('.', ','),
+    rotuloSalvar: 'Salvar valor',
+    aria: 'Valor em reais',
+    // Aceita "35", "35,50" e "35.50"; qualquer lixo vira 0 (= falta).
+    interpretar: (txt) => {
+      const reais = parseFloat(txt.replace(/\s/g, '').replace(',', '.'));
+      return Number.isFinite(reais) && reais > 0 ? Math.round(reais * 100) : 0;
+    },
+  });
+}
+
+/** Duração em MINUTOS. Devolve null se o valor digitado não fizer sentido. */
+function pedirDuracao(minutosAtuais, { titulo = 'Tempo do atendimento', texto = 'Quantos minutos esse atendimento vai durar? O horário de término e os horários livres do dia se ajustam sozinhos.' } = {}) {
+  return pedirNumero({
+    titulo,
+    texto,
+    prefixo: 'min',
+    valorInicial: String(minutosAtuais),
+    rotuloSalvar: 'Salvar tempo',
+    aria: 'Duração em minutos',
+    interpretar: (txt) => {
+      const min = parseInt(txt.replace(/\D/g, ''), 10);
+      return Number.isFinite(min) && min >= 5 && min <= 240 ? min : null;
+    },
   });
 }
 
@@ -375,13 +410,15 @@ const Agenda = {
     this.ligarAcoes(area);
   },
 
-  /** Cartões "Hoje" e "Esta semana" (mesma semana, seg. a partir do domingo). Uma consulta só. */
+  /** Cartões do dia selecionado e da semana dele (a partir do domingo). Uma consulta só.
+   * O primeiro cartão acompanha o dia que o Daniel clicou na faixa — ele usa
+   * isso para conferir o fechamento de um dia específico, não só o de hoje. */
   async carregarResumo(barbeiroId) {
     const area = $('#agenda-resumo');
-    const hojeYmd = partesNoFuso(new Date()).ymd;
-    const inicioHoje = new Date(`${hojeYmd}T00:00:00${OFFSET}`);
-    const fimHoje = new Date(inicioHoje.getTime() + 86400000);
-    const inicioSemana = new Date(`${this.domingoDaSemana(hojeYmd)}T00:00:00${OFFSET}`);
+    const ehHoje = this.dia === partesNoFuso(new Date()).ymd;
+    const inicioDia = new Date(`${this.dia}T00:00:00${OFFSET}`);
+    const fimDia = new Date(inicioDia.getTime() + 86400000);
+    const inicioSemana = new Date(`${this.domingoDaSemana(this.dia)}T00:00:00${OFFSET}`);
     const fimSemana = new Date(inicioSemana.getTime() + 7 * 86400000);
 
     const { data, error } = await sb.from('agendamentos')
@@ -394,17 +431,20 @@ const Agenda = {
 
     if (error) { area.innerHTML = ''; return; }
 
-    const daHoje = data.filter((a) => {
+    const doDia = data.filter((a) => {
       const t = new Date(a.inicio);
-      return t >= inicioHoje && t < fimHoje;
+      return t >= inicioDia && t < fimDia;
     });
     const somar = (lista) => lista.reduce((s, a) => s + valorCobrado(a), 0);
 
+    const [, mes, diaNum] = this.dia.split('-');
+    const rotuloDia = ehHoje ? 'Hoje' : `${diaNum}/${mes}`;
+
     area.innerHTML = `
       <div class="agenda-resumo__cartao agenda-resumo__cartao--destaque">
-        <span class="agenda-resumo__rotulo">Hoje</span>
-        <span class="agenda-resumo__valor">${formatarPreco(somar(daHoje))}</span>
-        <span class="agenda-resumo__numero">${daHoje.length}</span>
+        <span class="agenda-resumo__rotulo">${rotuloDia}</span>
+        <span class="agenda-resumo__valor">${formatarPreco(somar(doDia))}</span>
+        <span class="agenda-resumo__numero">${doDia.length}</span>
       </div>
       <div class="agenda-resumo__cartao">
         <span class="agenda-resumo__rotulo">Esta semana</span>
@@ -473,9 +513,12 @@ const Agenda = {
          </span>`;
 
     return `
-    <article class="bloco-agendamento vidro" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}">
+    <article class="bloco-agendamento vidro" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}" data-inicio="${a.inicio}" data-fim="${a.fim}">
       <div class="bloco-agendamento__topo">
-        <span class="bloco-agendamento__hora">${formatarHora(a.inicio)} – ${formatarHora(a.fim)}</span>
+        <span class="bloco-agendamento__hora">
+          ${formatarHora(a.inicio)} – ${formatarHora(a.fim)}
+          ${podeAgir ? `<button class="hora-btn acao-duracao" type="button" data-min="${Math.round((new Date(a.fim) - new Date(a.inicio)) / 60000)}" title="Ajustar o tempo deste atendimento" aria-label="Ajustar tempo">⏱</button>` : ''}
+        </span>
         <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
       </div>
       <div class="bloco-agendamento__corpo">
@@ -515,6 +558,35 @@ const Agenda = {
           : `Valor atualizado para ${formatarPreco(centavos)}.`);
         this.carregar();
         Relatorios.carregar(); // faturamento acompanha o valor editado
+      });
+    });
+
+    // Ajustar o tempo do atendimento: o Daniel conhece o cliente e sabe que
+    // vai levar menos (ou mais) que o padrão do serviço. Muda só o fim, então
+    // o horário que o cliente reservou continua valendo e a agenda reabre o
+    // espaço que sobrar para encaixar outra pessoa.
+    $$('.acao-duracao', area).forEach((b) => {
+      b.addEventListener('click', async () => {
+        const cartao = b.closest('.bloco-agendamento');
+        const minutos = await pedirDuracao(parseInt(b.dataset.min, 10));
+        if (minutos === null) return;
+
+        const inicio = new Date(cartao.dataset.inicio);
+        const fim = new Date(inicio.getTime() + minutos * 60000);
+
+        // Não deixa passar por cima do próximo atendimento do dia.
+        const conflito = $$('.bloco-agendamento', area).some((outro) => {
+          if (outro === cartao) return false;
+          const oIni = new Date(outro.dataset.inicio);
+          const oFim = new Date(outro.dataset.fim);
+          return inicio < oFim && fim > oIni;
+        });
+        if (conflito) return feedback('Esse tempo passa por cima do próximo atendimento.', 'erro');
+
+        const { error } = await sb.from('agendamentos').update({ fim: fim.toISOString() }).eq('id', cartao.dataset.id);
+        if (error) return feedback('Não foi possível salvar o tempo. Tente novamente.', 'erro');
+        feedback(`Tempo ajustado para ${minutos} min.`);
+        this.carregar();
       });
     });
 
@@ -790,6 +862,13 @@ const Assinantes = {
                 ? `Usou ${a.usados_mes} de 4 este mês · restam ${restantes}`
                 : 'Ainda não criou a conta — o plano vale assim que ela entrar com esse e-mail.'}
             </small>
+            <small class="cartao-agendamento__nota">
+              Corte deste cliente:
+              <button class="link-sutil link-sutil--inline acao-duracao-assinante" type="button"
+                      data-min="${a.duracao_min ?? a.duracao_padrao}">
+                ${a.duracao_min ? `${a.duracao_min} min` : `${a.duracao_padrao} min (padrão)`}
+              </button>
+            </small>
           </div>
           <div class="cartao-agendamento__acoes">
             <span class="etiqueta-status ${a.tem_conta ? 'etiqueta-status--concluido' : 'etiqueta-status--cancelado'}">
@@ -803,6 +882,25 @@ const Assinantes = {
 
     $$('.acao-remover-assinante', area).forEach((botao) =>
       botao.addEventListener('click', () => this.remover(botao.closest('[data-id]'))));
+
+    // Tempo de corte combinado com esse cliente: vale sempre que ele agendar
+    // pelo plano, sem o Daniel precisar ajustar depois. Não afeta o pezinho.
+    $$('.acao-duracao-assinante', area).forEach((botao) => {
+      botao.addEventListener('click', async () => {
+        const cartao = botao.closest('[data-id]');
+        const minutos = await pedirDuracao(parseInt(botao.dataset.min, 10), {
+          titulo: 'Tempo de corte deste cliente',
+          texto: 'Sempre que ele agendar pelo plano, o horário já reserva esse tempo. Vale só para o corte — o pezinho mantém o tempo padrão.',
+        });
+        if (minutos === null) return;
+        const { error } = await sb.from('assinaturas')
+          .update({ duracao_min: minutos })
+          .eq('id', cartao.dataset.id);
+        if (error) return feedback('Não foi possível salvar o tempo.', 'erro');
+        feedback(`Corte deste cliente ajustado para ${minutos} min.`);
+        this.carregar();
+      });
+    });
   },
 
   async adicionar(evento) {

@@ -7,12 +7,77 @@
 
 'use strict';
 
-/* Grade de horários candidatos: um início a cada 15 minutos.
-   15 (e não 30) para que o próximo horário livre encaixe logo após serviços
-   de duração variável — ex.: um corte de 75min às 16:00 libera as 17:15. */
+/* Grade base de horários: um início a cada 30 minutos. Serviços de duração
+   quebrada não ficam presos a ela — o fim de cada atendimento também vira um
+   horário candidato (ver calcularSlotsLivres). */
 const PASSO_MINUTOS = 30;
 /* Antecedência mínima para agendar (em minutos) */
 const ANTECEDENCIA_MIN = 30;
+
+/**
+ * Horários livres de um dia, dado o expediente e as ocupações de cada barbeiro.
+ * Função pura (sem DOM, sem rede) — é o coração da agenda e o que test/slots.js
+ * cobre. Devolve os inícios possíveis, já ordenados.
+ *
+ * candidatos: [{ abre, fecha, ocupados: [{inicio, fim}] }] em ms
+ * duracaoMs: quanto dura o serviço escolhido
+ * agora: nada antes disso é oferecido (inclui a antecedência mínima)
+ * duracaoTipicaMs: referência de "buraco aproveitável" (a duração mais comum)
+ * passoMs: grade base
+ */
+function calcularSlotsLivres(candidatos, { duracaoMs, agora, duracaoTipicaMs, passoMs }) {
+  if (!candidatos.length) return [];
+
+  const janelaInicio = Math.min(...candidatos.map((c) => c.abre));
+  const janelaFim = Math.max(...candidatos.map((c) => c.fecha));
+
+  // Grade base + dois encaixes exatos em cada compromisso: logo depois dele
+  // (o.fim) e logo antes dele (o.inicio - duração). Sem o primeiro, um corte
+  // de 40min às 10:00 deixaria os 20min seguintes mortos — a grade só
+  // ofereceria 10:30 (conflita) e 11:00. Sem o segundo, quem quer marcar
+  // antes de um compromisso das 10:40 só teria 10:00 e sobrariam 10min.
+  const pontos = new Set();
+  for (let t = janelaInicio; t <= janelaFim; t += passoMs) pontos.add(t);
+  candidatos.forEach((c) => c.ocupados.forEach((o) => {
+    pontos.add(o.fim);
+    pontos.add(o.inicio - duracaoMs);
+  }));
+
+  const slots = [];
+  for (const inicio of [...pontos].sort((a, b) => a - b)) {
+    const fim = inicio + duracaoMs;
+    if (inicio < agora) continue; // já passou (ou está em cima da hora)
+
+    // O último horário do dia é o próprio fechamento: o atendimento pode
+    // terminar depois, o cliente só precisa entrar na cadeira até lá.
+    const candidato = candidatos.find((c) =>
+      inicio >= c.abre && inicio <= c.fecha &&
+      !c.ocupados.some((o) => inicio < o.fim && fim > o.inicio)
+    );
+    if (!candidato) continue;
+
+    // Só o buraco ANTES desqualifica, e apenas contra um compromisso real
+    // (não a abertura do dia, que ainda pode receber agendamento). O buraco
+    // DEPOIS é criado pelo almoço/fechamento, não pela escolha do cliente:
+    // punir por ele apagava justamente o melhor horário — um corte que
+    // termina 11:10 com almoço às 12:00 deixa 20min sobrando faça o que
+    // fizer, e descartar 11:10 por isso jogava a manhã inteira fora.
+    const eventoAntes = Math.max(candidato.abre, ...candidato.ocupados.filter((o) => o.fim <= inicio).map((o) => o.fim));
+    const buracoAntes = eventoAntes > candidato.abre ? inicio - eventoAntes : 0;
+    const fragmenta = buracoAntes > 0 && buracoAntes < duracaoTipicaMs;
+
+    slots.push({ inicio, fragmenta });
+  }
+
+  // Daniel prefere perder a chance de um cliente que só serve naquele horário
+  // a ficar com um buraco morto no dia. Exceção: se sobrar só horário ruim,
+  // oferece mesmo assim — nada é pior que nada.
+  const bons = slots.filter((s) => !s.fragmenta);
+  return (bons.length ? bons : slots).map((s) => s.inicio).sort((a, b) => a - b);
+}
+
+/* Exporta para o teste em Node; no browser `module` não existe e isso é ignorado. */
+if (typeof module !== 'undefined') module.exports = { calcularSlotsLivres };
 /* Nomes completos dos meses para o cabeçalho do calendário */
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
@@ -792,61 +857,21 @@ const Agendamento = {
       })
       .filter(Boolean);
 
-    // Slot livre = algum candidato cobre o início dentro do expediente dele e
-    // sem conflito. O último horário do dia é o próprio fechamento — o
-    // atendimento pode terminar depois (o cliente entra na cadeira até lá).
-    const janelaInicio = candidatos.length ? Math.min(...candidatos.map((c) => c.abre)) : 0;
-    const janelaFim = candidatos.length ? Math.max(...candidatos.map((c) => c.fecha)) : 0;
-
-    // Pontos de início candidatos = grade fixa de 30 em 30 + o horário exato em
-    // que cada atendimento termina. Sem isso, um corte de 40min às 10:00 (termina
-    // 10:40) deixa os próximos 20min mortos: a grade só oferece 10:30 (conflita)
-    // e 11:00 (livre), sem nunca sugerir 10:40 — o barbeiro perde esse tempo.
-    const pontos = new Set();
-    for (let t = janelaInicio; t <= janelaFim; t += PASSO_MINUTOS * 60000) pontos.add(t);
-    candidatos.forEach((c) => c.ocupados.forEach((o) => pontos.add(o.fim)));
-
     // Duração mais comum entre os serviços avulsos (a moda, não o máximo — um
     // outlier como Progressiva de 50min tornaria quase todo buraco "pequeno
-    // demais"). Na prática isso cai na duração do corte, o serviço do dia a
-    // dia: um buraco menor que isso tende a sobrar sem próximo cliente para
-    // preencher. Só conta como morto quando os dois lados são compromissos
-    // reais — contra a abertura/fechamento não conta, porque outro
-    // agendamento ainda pode nascer bem ali.
+    // demais"). Na prática cai na duração do corte, o serviço do dia a dia.
     const contagem = new Map();
     Estado.servicos.filter((s) => !s.assinatura).forEach((s) => contagem.set(s.duracao_min, (contagem.get(s.duracao_min) || 0) + 1));
     const duracaoTipicaMs = contagem.size
       ? [...contagem.entries()].reduce((a, b) => (b[1] > a[1] ? b : a))[0] * 60000
       : 0;
 
-    const slots = [];
-    for (const inicio of [...pontos].sort((a, b) => a - b)) {
-      const fim = inicio + duracaoMs;
-      if (inicio < agora) continue; // horário já passou (ou muito em cima)
-
-      const candidato = candidatos.find((c) =>
-        inicio >= c.abre && inicio <= c.fecha &&
-        !c.ocupados.some((o) => inicio < o.fim && fim > o.inicio)
-      );
-      if (!candidato) continue;
-
-      const eventoAntes = Math.max(candidato.abre, ...candidato.ocupados.filter((o) => o.fim <= inicio).map((o) => o.fim));
-      const buracoAntes = eventoAntes > candidato.abre ? inicio - eventoAntes : 0;
-
-      const eventoDepois = Math.min(candidato.fecha, ...candidato.ocupados.filter((o) => o.inicio >= fim).map((o) => o.inicio));
-      const buracoDepois = eventoDepois - fim;
-
-      const fragmenta = (buracoAntes > 0 && buracoAntes < duracaoTipicaMs) || (buracoDepois > 0 && buracoDepois < duracaoTipicaMs);
-
-      slots.push({ data: new Date(inicio), fragmenta });
-    }
-
-    // Daniel prefere perder a chance de um cliente que só serve naquele
-    // horário a ficar com um buraco morto no dia — então os horários que
-    // fragmentam a agenda são removidos, não só reordenados. Exceção: se
-    // sobrar só horário ruim, oferece mesmo assim (nada é pior que nada).
-    const semBuraco = slots.filter((s) => !s.fragmenta);
-    const finais = (semBuraco.length ? semBuraco : slots).sort((a, b) => a.data - b.data);
+    const finais = calcularSlotsLivres(candidatos, {
+      duracaoMs,
+      agora,
+      duracaoTipicaMs,
+      passoMs: PASSO_MINUTOS * 60000,
+    });
 
     if (finais.length === 0) {
       area.innerHTML = '<p class="app-aviso-passo">Nenhum horário livre neste dia. Escolha outro dia.</p>';
@@ -854,7 +879,8 @@ const Agendamento = {
     }
 
     area.innerHTML = finais
-      .map(({ data }) => `<button class="opcao-horario" type="button" data-iso="${data.toISOString()}">${formatarHora(data.toISOString())}</button>`)
+      .map((ms) => new Date(ms))
+      .map((data) => `<button class="opcao-horario" type="button" data-iso="${data.toISOString()}">${formatarHora(data.toISOString())}</button>`)
       .join('');
 
     $$('.opcao-horario', area).forEach((botao) => {
@@ -1296,11 +1322,15 @@ const Abas = {
 /* ============================================================
    INICIALIZAÇÃO
 ============================================================ */
-document.addEventListener('DOMContentLoaded', async () => {
-  $('#ano-atual').textContent = new Date().getFullYear();
-  Abas.init();
-  Visitante.init();
-  await Auth.init();
-  await Agendamento.init();
-  if (location.hash === '#meus') MeusAgendamentos.carregar();
-});
+/* O `if` deixa o arquivo ser carregado pelo teste em Node (sem DOM);
+   no browser a condição é sempre verdadeira. */
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', async () => {
+    $('#ano-atual').textContent = new Date().getFullYear();
+    Abas.init();
+    Visitante.init();
+    await Auth.init();
+    await Agendamento.init();
+    if (location.hash === '#meus') MeusAgendamentos.carregar();
+  });
+}
