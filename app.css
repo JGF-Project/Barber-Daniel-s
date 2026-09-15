@@ -2392,3 +2392,9 @@ input[type="datetime-local"] {
 .bloco-fechado__motivo {
   font-size: 0.8125rem;
 }
+
+/* Botão de notificações no cabeçalho, quando já ativadas */
+#botao-notificacoes.botao--ativo {
+  border-color: var(--cor-dourado);
+  color: var(--cor-dourado);
+}

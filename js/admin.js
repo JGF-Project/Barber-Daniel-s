@@ -2235,7 +2235,12 @@ const NovoAgendamento = {
     this.erro.hidden = true;
 
     const nome = $('#novo-cliente').value.trim();
+    const celular = $('#novo-celular').value.trim();
     if (!nome) return this.mostrarErro('Informe o nome do cliente.');
+    // O banco exige celular sempre que não há conta vinculada (é o que o
+    // botão de WhatsApp no card do agendamento usa depois) — sem isso o
+    // agendamento seria recusado com um erro sem explicação nenhuma.
+    if (!celular) return this.mostrarErro('Informe o celular do cliente.');
     if (!this.servico.value) return this.mostrarErro('Escolha um serviço.');
 
     // No modo livre o fim vem da barra; senão, é a duração do serviço.
@@ -2247,7 +2252,7 @@ const NovoAgendamento = {
       p_servico_ids: [this.servico.value],
       p_inicio: inicio.toISOString(),
       p_nome: nome,
-      p_celular: $('#novo-celular').value.trim() || null,
+      p_celular: celular,
       p_fim: this.livre ? this.livre.fim.toISOString() : null,
     });
     if (error) return this.mostrarErro(error.message || 'Não foi possível agendar.');
@@ -2264,6 +2269,105 @@ const NovoAgendamento = {
   },
 };
 
+/* ============================================================
+   NOTIFICAÇÕES — avisa o Daniel no celular quando alguém agenda
+   ------------------------------------------------------------
+   Chave pública do VAPID: é feita pra ser pública (o navegador usa ela pra
+   validar quem pode mandar push pra essa inscrição) — mesma lógica da chave
+   do Supabase já exposta em js/supabase.js. A privada mora só no banco,
+   numa tabela que só a Edge Function enxerga.
+============================================================ */
+const VAPID_PUBLIC_KEY = 'BMl7n26L7xKI89wfvGKjLSbu66hFdXYMk0KQ9v1BPyHQHcpcaAhj1Zrf0G3PhjWJevKnUZl7G8dleD1RGuJF7tQ';
+
+function urlBase64ToUint8Array(base64) {
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const bruto = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...bruto].map((c) => c.charCodeAt(0)));
+}
+
+const Notificacoes = {
+  async init() {
+    $('#botao-notificacoes')?.addEventListener('click', () => this.alternar());
+    if ('serviceWorker' in navigator) {
+      try { await navigator.serviceWorker.register('sw.js'); } catch { /* sem suporte — o clique no botão explica o motivo */ }
+    }
+    this.atualizarBotao();
+  },
+
+  suportado() {
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  },
+
+  /** No iPhone a API de notificação só existe depois de abrir o site pelo
+   * ícone da Tela de Início (modo instalado) — dentro do Safari comum ela
+   * nem aparece, então suportado() sozinho não avisa o motivo real. */
+  precisaInstalar() {
+    const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const instalado = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    return iOS && !instalado;
+  },
+
+  async atualizarBotao() {
+    const botao = $('#botao-notificacoes');
+    if (!botao || !this.suportado()) return;
+    const registro = await navigator.serviceWorker.ready.catch(() => null);
+    const inscricao = registro ? await registro.pushManager.getSubscription() : null;
+    botao.textContent = inscricao ? '🔔 Notificações ativas' : '🔔 Ativar notificações';
+    botao.classList.toggle('botao--ativo', !!inscricao);
+  },
+
+  async alternar() {
+    if (this.precisaInstalar()) {
+      return feedback('No iPhone: toque em Compartilhar → "Adicionar à Tela de Início" e abra o painel por esse ícone — só assim dá pra ativar notificação.', 'erro');
+    }
+    if (!this.suportado()) {
+      return feedback('Este navegador não aceita notificações.', 'erro');
+    }
+
+    const registro = await navigator.serviceWorker.ready;
+    const atual = await registro.pushManager.getSubscription();
+
+    if (atual) {
+      await atual.unsubscribe();
+      await sb.from('push_subscriptions').delete().eq('endpoint', atual.endpoint);
+      feedback('Notificações desativadas.');
+      return this.atualizarBotao();
+    }
+
+    const permissao = await Notification.requestPermission();
+    if (permissao !== 'granted') {
+      return feedback('Permissão negada. Se mudar de ideia, ative nas configurações do navegador.', 'erro');
+    }
+
+    let inscricao;
+    try {
+      inscricao = await registro.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    } catch {
+      return feedback('Não foi possível ativar as notificações. Tente de novo.', 'erro');
+    }
+
+    const json = inscricao.toJSON();
+    const { error } = await sb.from('push_subscriptions').upsert({
+      usuario_id: Estado.sessao.user.id,
+      barbearia_id: BARBEARIA_ID,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    }, { onConflict: 'usuario_id,endpoint' });
+
+    if (error) {
+      await inscricao.unsubscribe();
+      return feedback('Não foi possível salvar a inscrição. Tente de novo.', 'erro');
+    }
+
+    feedback('Notificações ativadas — você vai ser avisado quando alguém agendar.');
+    this.atualizarBotao();
+  },
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   $('#ano-atual').textContent = new Date().getFullYear();
   AbasAdmin.init();
@@ -2277,6 +2381,7 @@ document.addEventListener('DOMContentLoaded', () => {
   Barbeiros.init();
   Horarios.init();
   Ausencias.init();
+  Notificacoes.init();
   AuthAdmin.init();
 
   // Dropdowns estilizados em todos os seletores do painel

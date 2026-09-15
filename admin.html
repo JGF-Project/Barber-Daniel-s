@@ -9,12 +9,21 @@
   <meta name="theme-color" content="#111111">
   <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
 
+  <!-- "Adicionar à Tela de Início" no iPhone: sem isso o Safari instala o
+       ícone certo, mas abre dentro do próprio Safari (com a barra de
+       endereço) em vez de tela cheia, e não recebe notificação push. -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Painel ADM">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css?v=4">
-  <link rel="stylesheet" href="app.css?v=18">
+  <link rel="stylesheet" href="app.css?v=19">
 </head>
 
 <body class="pagina-app pagina-admin">
@@ -37,6 +46,9 @@
 
       <div class="app-cabecalho__acoes">
         <div class="app-usuario" id="area-usuario" hidden>
+          <button class="botao botao--fantasma botao--pequeno" type="button" id="botao-notificacoes" title="Ativar notificações de novos agendamentos">
+            🔔 Notificações
+          </button>
           <span class="app-usuario__nome" id="usuario-nome"></span>
           <button class="botao botao--fantasma botao--pequeno" type="button" id="botao-sair">Sair</button>
         </div>
@@ -454,8 +466,8 @@
       </div>
 
       <div class="formulario__campo">
-        <label for="novo-celular">Celular (opcional)</label>
-        <input type="tel" id="novo-celular" inputmode="numeric" placeholder="(13) 99999-0000" autocomplete="off">
+        <label for="novo-celular">Celular</label>
+        <input type="tel" id="novo-celular" inputmode="numeric" placeholder="(13) 99999-0000" autocomplete="off" required>
       </div>
 
       <div class="formulario__campo formulario__campo--seletor">
@@ -518,6 +530,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase.js?v=5"></script>
   <script src="js/slots.js?v=1"></script>
-  <script src="js/admin.js?v=30"></script>
+  <script src="js/admin.js?v=31"></script>
 </body>
 </html>
