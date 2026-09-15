@@ -1150,7 +1150,8 @@
 .linha-tempo__hora {
   padding-top: var(--espaco-2);
   font-size: 0.8125rem;
-  color: var(--cor-texto-suave);
+  font-weight: 600;
+  color: var(--cor-branco);
 }
 
 /* Hora do expediente sem nada começando nela — só o espaço, sem cartão */
