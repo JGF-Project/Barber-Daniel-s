@@ -44,10 +44,15 @@ function calcularSlotsLivres(candidatos, { duracaoMs, agora, duracaoTipicaMs, pa
     if (inicio < agora) continue; // já passou (ou está em cima da hora)
 
     // O último horário do dia é o próprio fechamento: o atendimento pode
-    // terminar depois, o cliente só precisa entrar na cadeira até lá.
+    // terminar depois, o cliente só precisa entrar na cadeira até lá. Mas
+    // essa folga só existe quando não tem nada encostado bem no fechamento —
+    // se um bloqueio ou atendimento já termina exatamente na hora de fechar
+    // (ex.: Daniel fechou 19:30–20:00 num expediente até as 20:00), oferecer
+    // as 20:00 mesmo assim reabre a porta que ele acabou de fechar.
     const candidato = candidatos.find((c) =>
       inicio >= c.abre && inicio <= c.fecha &&
-      !c.ocupados.some((o) => inicio < o.fim && fim > o.inicio)
+      !c.ocupados.some((o) => inicio < o.fim && fim > o.inicio) &&
+      !(inicio === c.fecha && c.ocupados.some((o) => o.fim === c.fecha))
     );
     if (!candidato) continue;
 

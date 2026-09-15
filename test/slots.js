@@ -147,6 +147,20 @@ teste('quando todo encaixe deixa buraco, oferece mesmo assim', () => {
   assert.ok(r.includes('10:10'), `devia oferecer 10:10 mesmo sobrando 5min. Veio: ${r.join(', ')}`);
 });
 
+// --- Fechamento manual encostado no fim do expediente ---
+teste('bloqueio até o fechamento tira o horário-fantasma no fechamento', () => {
+  // Daniel fecha 19:30-20:00 num dia que termina às 20:00: não pode sobrar
+  // "20:00" como se desse pra começar algo bem quando a loja já fechou.
+  const r = slots({ ocupados: [['19:30', '20:00']] });
+  assert.ok(!r.includes('20:00'), `20:00 reabre o horário que ele fechou. Veio: ${r.join(', ')}`);
+});
+
+teste('dia livre continua oferecendo o fechamento como último horário', () => {
+  // sem nada encostado no fechamento, a folga de sempre continua valendo
+  const r = slots({});
+  assert.ok(r.includes('20:00'), `sem bloqueio nenhum, 20:00 devia continuar disponível. Veio: ${r.join(', ')}`);
+});
+
 // --- Vários barbeiros (cliente sem preferência) ---
 teste('sem preferência: união dos horários dos barbeiros', () => {
   const r = slots({
