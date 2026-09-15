@@ -410,7 +410,23 @@ const Agenda = {
       return;
     }
 
-    area.innerHTML = this.montarLinhaDoTempo(agendamentosRes.data, horarioRes.data, bloqueiosRes.data || []);
+    // O almoço não é uma tabela própria — é só um horário fixo em barbeiros.almoco_*
+    // (mesma config pros 7 dias). Só vira card no dia em que ele realmente cai
+    // dentro do expediente: num dia que abre depois do fim do almoço (ex.:
+    // segunda 14h–18h) ele não existe de verdade, e mostrar um card ali seria
+    // o mesmo horário-fantasma que já corrigimos no horário de fechamento.
+    const barbeiro = this.barbeiros.find((b) => b.id === barbeiroId);
+    const h = horarioRes.data;
+    let almoco = null;
+    if (barbeiro?.almoco_inicio && barbeiro?.almoco_fim && h && !h.fechado && h.abre && h.fecha) {
+      const abre = new Date(`${this.dia}T${h.abre}${OFFSET}`).getTime();
+      const fecha = new Date(`${this.dia}T${h.fecha}${OFFSET}`).getTime();
+      const almIni = new Date(`${this.dia}T${barbeiro.almoco_inicio}${OFFSET}`).getTime();
+      const almFim = new Date(`${this.dia}T${barbeiro.almoco_fim}${OFFSET}`).getTime();
+      if (almIni < fecha && almFim > abre) almoco = { inicio: Math.max(almIni, abre), fim: Math.min(almFim, fecha) };
+    }
+
+    area.innerHTML = this.montarLinhaDoTempo(agendamentosRes.data, horarioRes.data, bloqueiosRes.data || [], almoco);
     this.ligarAcoes(area);
   },
 
@@ -460,17 +476,18 @@ const Agenda = {
   /** Monta a coluna: uma linha de hora cheia para cada hora do expediente (10:00, 11:00, 12:00…),
    * igual ao app de referência do Daniel — não só nas horas em que algo começa. Atendimentos
    * agrupados na hora em que começam; hora sem nada começando nela fica em branco. */
-  montarLinhaDoTempo(agendamentos, horario, bloqueios = []) {
+  montarLinhaDoTempo(agendamentos, horario, bloqueios = [], almoco = null) {
     if (!horario || horario.fechado || !horario.abre || !horario.fecha) {
       return '<p class="app-aviso-passo">O barbeiro não atende neste dia.</p>';
     }
 
     const abre = new Date(`${this.dia}T${horario.abre}${OFFSET}`).getTime();
     const fecha = new Date(`${this.dia}T${horario.fecha}${OFFSET}`).getTime();
-    // Atendimentos e horários fechados dividem a mesma linha do tempo, na ordem do relógio.
+    // Atendimentos, horários fechados e o almoço dividem a mesma linha do tempo, na ordem do relógio.
     const eventos = [
       ...agendamentos.map((a) => ({ agendamento: a, inicio: new Date(a.inicio).getTime(), fim: new Date(a.fim).getTime() })),
       ...bloqueios.map((b) => ({ bloqueio: b, inicio: new Date(b.inicio).getTime(), fim: new Date(b.fim).getTime() })),
+      ...(almoco ? [{ almoco: true, inicio: almoco.inicio, fim: almoco.fim }] : []),
     ].sort((x, y) => x.inicio - y.inicio);
 
     // Fuso da barbearia é fixo (-03:00, Brasil não tem mais horário de verão — ver supabase.js),
@@ -502,12 +519,26 @@ const Agenda = {
         continue;
       }
       doHora.forEach((ev, i) => {
-        const bloco = ev.bloqueio ? this.blocoFechado(ev.bloqueio) : this.blocoAgendamento(ev.agendamento);
+        const bloco = ev.bloqueio ? this.blocoFechado(ev.bloqueio)
+          : ev.almoco ? this.blocoAlmoco(ev.inicio, ev.fim)
+          : this.blocoAgendamento(ev.agendamento);
         linhas.push(`<span class="linha-tempo__hora">${i === 0 ? rotulo : ''}</span>${bloco}`);
       });
     }
 
     return `<div class="linha-tempo">${linhas.join('')}</div>`;
+  },
+
+  /** Card do almoço — mesmo visual de "Horário fechado", sem botão de reabrir
+   * (o horário vem da configuração do barbeiro, edita-se na aba Barbeiros). */
+  blocoAlmoco(inicioMs, fimMs) {
+    return `
+    <article class="bloco-fechado">
+      <div class="bloco-fechado__topo">
+        <span class="bloco-agendamento__hora">${formatarHora(new Date(inicioMs).toISOString())} – ${formatarHora(new Date(fimMs).toISOString())}</span>
+      </div>
+      <strong class="bloco-fechado__titulo">🍽 Almoço</strong>
+    </article>`;
   },
 
   /** Faixa listrada de "Horário fechado" — o que o cadeado cria. */
