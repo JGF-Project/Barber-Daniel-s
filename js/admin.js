@@ -152,18 +152,39 @@ function feedback(texto, tipo = 'info') {
  * Trava a rolagem do fundo enquanto pelo menos um modal está aberto. Usa
  * contador em vez de um simples on/off: o Modo livre abre por cima do Novo
  * Agendamento, então fechar o de cima não pode destravar a rolagem enquanto
- * o de baixo ainda está na tela. Sem isso, no iPhone o corpo da página
- * continua rolando e clicável por baixo de qualquer modal (o "consigo mexer
- * no painel por trás" que dá pra sentir no toque, mesmo o modal parecendo
- * cobrir a tela toda no desktop).
+ * o de baixo ainda está na tela.
+ *
+ * `overflow: hidden` no body NÃO trava o toque no Safari do iPhone — é uma
+ * peculiaridade conhecida do iOS (funciona em desktop, não em touch). O
+ * jeito que realmente funciona lá é tirar o body do fluxo rolável de
+ * verdade: position:fixed nele, guardando a posição de rolagem atual pra
+ * devolver exatamente onde estava ao destravar.
  */
 let travasRolagem = 0;
+let scrollAntesDeTravar = 0;
 function travarRolagem() {
-  if (travasRolagem++ === 0) document.body.style.overflow = 'hidden';
+  if (travasRolagem++ === 0) {
+    scrollAntesDeTravar = window.scrollY;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollAntesDeTravar}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    // position:fixed sem largura deixa o body encolher pro tamanho do
+    // conteúdo (shrink-to-fit) — sem isso a página atrás do modal quebra
+    // visualmente enquanto travada.
+    document.body.style.width = '100%';
+  }
 }
 function destravarRolagem() {
   travasRolagem = Math.max(0, travasRolagem - 1);
-  if (travasRolagem === 0) document.body.style.overflow = '';
+  if (travasRolagem === 0) {
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    window.scrollTo(0, scrollAntesDeTravar);
+  }
 }
 
 /**
@@ -1919,9 +1940,28 @@ function estilizarSelect(select) {
   const fechar = () => { lista.hidden = true; botao.classList.remove('aberto'); botao.setAttribute('aria-expanded', 'false'); };
   const posicionar = () => {
     const r = botao.getBoundingClientRect();
-    lista.style.top = `${r.bottom + 6}px`;
+    // window.innerHeight inclui área que a barra do Safari cobre por cima —
+    // visualViewport.height é a altura realmente visível/tocável. Sem isso,
+    // um botão perto do fim da tela abre a lista pra baixo e o(s) último(s)
+    // item(ns) ficam atrás da barra, impossíveis de tocar.
+    const alturaVisivel = window.visualViewport?.height ?? window.innerHeight;
+    const espacoAbaixo = alturaVisivel - r.bottom - 6;
+    const espacoAcima = r.top - 6;
+    const ALTURA_MAX = 260;
+    const ALTURA_MIN = 120; // abaixo disso não compensa listar, melhor virar pra cima
+
     lista.style.left = `${r.left}px`;
     lista.style.width = `${r.width}px`;
+
+    if (espacoAbaixo >= ALTURA_MIN || espacoAbaixo >= espacoAcima) {
+      lista.style.top = `${r.bottom + 6}px`;
+      lista.style.bottom = 'auto';
+      lista.style.maxHeight = `${Math.max(ALTURA_MIN, Math.min(ALTURA_MAX, espacoAbaixo))}px`;
+    } else {
+      lista.style.top = 'auto';
+      lista.style.bottom = `${alturaVisivel - r.top + 6}px`;
+      lista.style.maxHeight = `${Math.max(ALTURA_MIN, Math.min(ALTURA_MAX, espacoAcima))}px`;
+    }
   };
   const abrir = () => {
     posicionar(); // recalcula a cada abertura — a página pode ter rolado ou o layout mudado
