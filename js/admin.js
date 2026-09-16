@@ -516,9 +516,14 @@ const Agenda = {
       </div>`;
   },
 
-  /** Monta a coluna: uma linha de hora cheia para cada hora do expediente (10:00, 11:00, 12:00…),
-   * igual ao app de referência do Daniel — não só nas horas em que algo começa. Atendimentos
-   * agrupados na hora em que começam; hora sem nada começando nela fica em branco. */
+  /** Timeline proporcional ao minuto real, não só à hora cheia — pediram
+   * isso porque um corte às 11:40 aparecia colado no topo da faixa das 11h,
+   * como se tivesse começado na hora certa, e o Daniel achava que o cliente
+   * tinha marcado 14:00 em vez de 14:30 só de bater o olho na posição.
+   * Cada bloco fica posicionado (top) e dimensionado (height) pelo horário
+   * real: começa mais pra baixo dentro da faixa da hora se começa mais tarde
+   * nela, e cruza pra faixa seguinte se invade ela — sem precisar mais do
+   * aviso "Ocupado até", a própria régua já mostra isso. */
   montarLinhaDoTempo(agendamentos, horario, bloqueios = [], almoco = null) {
     if (!horario || horario.fechado || !horario.abre || !horario.fecha) {
       return '<p class="app-aviso-passo">O barbeiro não atende neste dia.</p>';
@@ -533,6 +538,15 @@ const Agenda = {
       ...(almoco ? [{ almoco: true, inicio: almoco.inicio, fim: almoco.fim }] : []),
     ].sort((x, y) => x.inicio - y.inicio);
 
+    // ponytail: escala fixa (10px por minuto) — cabe o cartão cheio (nome,
+    // serviço, valor, ações) num corte de uns 30min, o mais comum aqui. Um
+    // serviço avulso bem curto (barba/pezinho sozinhos, 10-15min) pode
+    // cortar o rodapé do cartão por falta de espaço; se incomodar na
+    // prática, a saída é um cartão compacto só pros bem curtos.
+    const PX_POR_MIN = 10;
+    const pxPorMs = PX_POR_MIN / 60000;
+    const topoPx = (ms) => Math.round((ms - abre) * pxPorMs);
+
     // Fuso da barbearia é fixo (-03:00, Brasil não tem mais horário de verão — ver supabase.js),
     // então "hora cheia local" dá pra calcular só deslocando o epoch, sem Intl por linha.
     const TRES_HORAS_MS = 3 * 3600000;
@@ -540,43 +554,29 @@ const Agenda = {
     const horaParaMs = (h) => h * 3600000 + TRES_HORAS_MS;
 
     const primeiraHora = horaCheiaLocal(abre);
-    const ultimaHora = horaCheiaLocal(fecha - 1); // fecha é exclusivo: -1ms evita uma hora vazia extra quando fecha cai certinho na hora cheia
-    const linhas = [];
-    for (let h = primeiraHora; h <= ultimaHora; h++) {
-      const inicioHora = horaParaMs(h);
-      const fimHora = horaParaMs(h + 1);
-      const doHora = eventos.filter((ev) => horaCheiaLocal(ev.inicio) === h);
-      const rotulo = formatarHora(new Date(inicioHora).toISOString());
-      if (!doHora.length) {
-        // Nada COMEÇA nesta hora, mas ela pode não estar livre mesmo assim:
-        // um atendimento iniciado numa hora anterior pode continuar entrando
-        // por aqui (ex.: 18:30–19:30 ocupa a hora das 19h inteira). Mostrar
-        // como vazio ali é exatamente o que gerou o buraco de 50min — o
-        // Daniel olha rápido e confia na hora em branco.
-        const continua = eventos.find((ev) => ev.inicio < fimHora && ev.fim > inicioHora);
-        linhas.push(`<span class="linha-tempo__hora">${rotulo}</span>${
-          continua
-            ? `<span class="linha-tempo__continuacao">Ocupado até ${formatarHora(new Date(continua.fim).toISOString())}</span>`
-            : '<span class="linha-tempo__vazio"></span>'
-        }`);
-        continue;
-      }
-      doHora.forEach((ev, i) => {
-        const bloco = ev.bloqueio ? this.blocoFechado(ev.bloqueio)
-          : ev.almoco ? this.blocoAlmoco(ev.inicio, ev.fim)
-          : this.blocoAgendamento(ev.agendamento);
-        linhas.push(`<span class="linha-tempo__hora">${i === 0 ? rotulo : ''}</span>${bloco}`);
-      });
+    const ultimaHora = horaCheiaLocal(fecha - 1); // fecha é exclusivo: -1ms evita uma marca a mais quando fecha cai certinho na hora cheia
+    const marcas = [];
+    for (let h = primeiraHora; h <= ultimaHora + 1; h++) {
+      const ms = horaParaMs(h);
+      if (ms < abre || ms > fecha) continue;
+      marcas.push(`<div class="linha-tempo__marca" style="top:${topoPx(ms)}px"><span class="linha-tempo__hora">${formatarHora(new Date(ms).toISOString())}</span></div>`);
     }
 
-    return `<div class="linha-tempo">${linhas.join('')}</div>`;
+    const blocos = eventos.map((ev) => {
+      const posicao = { top: topoPx(ev.inicio), altura: Math.max(1, topoPx(ev.fim) - topoPx(ev.inicio)) };
+      return ev.bloqueio ? this.blocoFechado(ev.bloqueio, posicao)
+        : ev.almoco ? this.blocoAlmoco(ev.inicio, ev.fim, posicao)
+        : this.blocoAgendamento(ev.agendamento, posicao);
+    });
+
+    return `<div class="linha-tempo" style="height:${topoPx(fecha)}px">${marcas.join('')}${blocos.join('')}</div>`;
   },
 
   /** Card do almoço — mesmo visual de "Horário fechado", sem botão de reabrir
    * (o horário vem da configuração do barbeiro, edita-se na aba Barbeiros). */
-  blocoAlmoco(inicioMs, fimMs) {
+  blocoAlmoco(inicioMs, fimMs, posicao) {
     return `
-    <article class="bloco-fechado">
+    <article class="bloco-fechado linha-tempo__bloco" style="top:${posicao.top}px;height:${posicao.altura}px">
       <div class="bloco-fechado__topo">
         <span class="bloco-agendamento__hora">${formatarHora(new Date(inicioMs).toISOString())} – ${formatarHora(new Date(fimMs).toISOString())}</span>
       </div>
@@ -585,9 +585,9 @@ const Agenda = {
   },
 
   /** Faixa listrada de "Horário fechado" — o que o cadeado cria. */
-  blocoFechado(b) {
+  blocoFechado(b, posicao) {
     return `
-    <article class="bloco-fechado" data-bloqueio="${b.id}">
+    <article class="bloco-fechado linha-tempo__bloco" data-bloqueio="${b.id}" style="top:${posicao.top}px;height:${posicao.altura}px">
       <div class="bloco-fechado__topo">
         <span class="bloco-agendamento__hora">${formatarHora(b.inicio)} – ${formatarHora(b.fim)}</span>
         <button class="acao-apagar acao-reabrir" type="button" aria-label="Reabrir este horário" title="Reabrir este horário">
@@ -599,7 +599,7 @@ const Agenda = {
     </article>`;
   },
 
-  blocoAgendamento(a) {
+  blocoAgendamento(a, posicao) {
     const podeAgir = a.status === 'confirmado';
     // Assinatura fica fora do apagar: remover a linha devolveria a cota do mês.
     const podeApagar = (a.status === 'cancelado' || a.status === 'concluido') && !a.via_assinatura;
@@ -627,7 +627,7 @@ const Agenda = {
          </span>`;
 
     return `
-    <article class="bloco-agendamento vidro" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}" data-inicio="${a.inicio}" data-fim="${a.fim}">
+    <article class="bloco-agendamento vidro linha-tempo__bloco" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}" data-inicio="${a.inicio}" data-fim="${a.fim}" style="top:${posicao.top}px;height:${posicao.altura}px">
       <div class="bloco-agendamento__topo">
         <span class="bloco-agendamento__hora">
           ${formatarHora(a.inicio)} – ${formatarHora(a.fim)}

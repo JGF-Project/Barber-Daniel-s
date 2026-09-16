@@ -1141,61 +1141,47 @@
 }
 
 /* ---------- Painel admin: linha do tempo da agenda ---------- */
+/* Proporcional ao minuto real (ver montarLinhaDoTempo): a régua e os cartões
+   são posicionados em px absolutos dentro desse container, não empilhados
+   em ordem — por isso position:relative com altura calculada em JS. */
 .linha-tempo {
-  display: grid;
-  grid-template-columns: 3rem 1fr;
-  gap: 0 var(--espaco-2);
+  position: relative;
 }
 
-/* Fosca de propósito: Daniel estava confundindo essa marcação de grade
-   (a hora cheia, só de referência) com o horário real do agendamento —
-   que já aparece bem destacado dentro do próprio cartão. Uma linha fina
-   separa cada hora, igual à referência que o Daniel mandou (:not(:empty)
-   pega só a célula que carrega o rótulo, não as vazias dos outros eventos
-   da mesma hora). */
-.linha-tempo__hora:not(:empty) {
-  padding-top: var(--espaco-3);
-  margin-top: var(--espaco-3);
+/* Marca de hora cheia (a linha + o rótulo) — puramente decorativa, fica atrás
+   dos cartões. Fosca de propósito: já teve gente confundindo essa marcação
+   de grade com o horário real do agendamento, que aparece destacado dentro
+   do próprio cartão. */
+.linha-tempo__marca {
+  position: absolute;
+  left: 0;
+  right: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.linha-tempo__hora {
+  display: inline-block;
+  margin-top: 0.25rem;
   font-size: 0.75rem;
   font-weight: 400;
   color: rgba(163, 163, 163, 0.55);
 }
 
-/* Hora do expediente sem nada começando nela — só o espaço, sem cartão */
-.linha-tempo__vazio {
-  min-height: 2.5rem;
-  padding-top: var(--espaco-3);
-  margin-top: var(--espaco-3);
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-/* Hora sem nada começando nela, mas ainda ocupada por um atendimento que vem
-   de antes — diferente de .linha-tempo__vazio de propósito, e grande o
-   suficiente pro Daniel bater o olho no meio de um corte e responder na
-   hora se tem horário livre, sem precisar parar pra ler com calma. */
-.linha-tempo__continuacao {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: 2.5rem;
-  padding: 0.625rem var(--espaco-3);
-  border-left: 3px solid var(--cor-dourado);
-  border-radius: var(--raio-pequeno);
-  background: rgba(200, 162, 74, 0.08);
-  font-size: 1.0625rem;
-  font-weight: 600;
-  color: var(--cor-branco);
-}
-
-.linha-tempo__continuacao::before {
-  content: '🔒';
-  font-size: 0.9em;
+/* Cartão de atendimento/bloqueio/almoço posicionado pelo horário real —
+   top e height vêm inline (ver montarLinhaDoTempo). overflow:hidden é
+   deliberado: um serviço bem curto (10-15min) não cabe o cartão inteiro
+   nessa altura, e é melhor cortar o rodapé do que vazar por cima do
+   próximo agendamento. */
+.linha-tempo__bloco {
+  position: absolute;
+  left: 3.5rem;
+  right: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .bloco-agendamento {
   padding: var(--espaco-2) var(--espaco-3);
-  margin-bottom: var(--espaco-2);
 }
 
 .bloco-agendamento__topo {
