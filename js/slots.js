@@ -43,11 +43,11 @@ function calcularSlotsLivres(candidatos, { duracaoMs, agora, duracaoTipicaMs, pa
     const fim = inicio + duracaoMs;
     if (inicio < agora) continue; // já passou (ou está em cima da hora)
 
-    // O fechamento não é mais um horário de início válido: clientes estavam
-    // marcando pra 20:00 num expediente que fecha às 20:00, e o corte
-    // simplesmente não cabia — tem que sobrar tempo real antes de fechar.
+    // O horário só é válido se o atendimento inteiro cabe antes de fechar —
+    // não só o início. Um corte de 40min às 17:30 num expediente até as
+    // 18:00 terminava 18:10, passando do fechamento; ninguém checava o fim.
     const candidato = candidatos.find((c) =>
-      inicio >= c.abre && inicio < c.fecha &&
+      inicio >= c.abre && inicio < c.fecha && fim <= c.fecha &&
       !c.ocupados.some((o) => inicio < o.fim && fim > o.inicio)
     );
     if (!candidato) continue;

@@ -162,6 +162,14 @@ teste('20:00 nunca é oferecido quando o dia fecha às 20:00', () => {
   assert.ok(!r.includes('20:00'), `20:00 é a hora de fechar. Veio: ${r.join(', ')}`);
 });
 
+teste('serviço não é oferecido se o FIM passa do fechamento, mesmo com início dentro do expediente', () => {
+  // segunda 14:00-18:00, corte de 40min: 17:30 terminaria 18:10 — não é só
+  // o início que tem que caber antes de fechar, o atendimento inteiro
+  const r = slots({ abre: '14:00', fecha: '18:00', duracaoMin: 40 });
+  assert.ok(!r.includes('17:30'), `17:30 + 40min passa do fechamento (18:10). Veio: ${r.join(', ')}`);
+  assert.strictEqual(r[r.length - 1], '17:00', `último início devia deixar o corte acabar até 18:00 (17:00+40min=17:40). Veio: ${r[r.length - 1]}`);
+});
+
 // --- Vários barbeiros (cliente sem preferência) ---
 teste('sem preferência: união dos horários dos barbeiros', () => {
   const r = slots({
