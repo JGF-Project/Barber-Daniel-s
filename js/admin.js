@@ -320,6 +320,13 @@ const Agenda = {
     });
     $('#limpar-finalizados')?.addEventListener('click', () => this.limparFinalizados());
     $('#agenda-sair')?.addEventListener('click', () => sb.auth.signOut());
+    // Girar o celular muda a quebra de linha e, com ela, a altura dos cartões —
+    // sem remedir, o conteúdo de um deles voltaria a ficar cortado.
+    let repos;
+    window.addEventListener('resize', () => {
+      clearTimeout(repos);
+      repos = setTimeout(() => this.posicionarBlocos($('#lista-agenda')), 150);
+    });
   },
 
   /** Preenche o seletor de barbeiros; chamado por Barbeiros.carregar() */
@@ -488,12 +495,50 @@ const Agenda = {
   posicionarBlocos(area) {
     const linha = $('.linha-tempo', area);
     if (!linha) return;
-    linha.style.height = `${linha.dataset.altura}px`;
-    $$('.linha-tempo__marca', linha).forEach((m) => { m.style.top = `${m.dataset.top}px`; });
-    $$('.linha-tempo__bloco', linha).forEach((b) => {
-      b.style.top = `${b.dataset.top}px`;
-      b.style.height = `${b.dataset.altura}px`;
-    });
+
+    const GAP = 6;
+    const blocos = $$('.linha-tempo__bloco', linha);
+
+    // 1) Mede a altura que cada cartão precisa pro conteúdo aparecer inteiro
+    //    (sem altura fixa, quem manda é o conteúdo).
+    blocos.forEach((b) => { b.style.height = ''; b.style.top = `${b.dataset.top}px`; });
+    const naturais = blocos.map((b) => b.offsetHeight);
+
+    // 2) Caminha pela régua em ordem de horário. Cada cartão fica na altura do
+    //    seu horário real; se o anterior for comprido demais e invadir, empurra
+    //    pra baixo — e o empurrão vira um deslocamento que todo mundo dali pra
+    //    frente herda, então a ordem continua certa e nada se sobrepõe. Um
+    //    atendimento curto nunca corta o próprio conteúdo: a página só fica
+    //    mais alta, que é o combinado.
+    const itens = [
+      ...$$('.linha-tempo__marca', linha).map((el) => ({ el, top: +el.dataset.top, marca: true })),
+      ...blocos.map((el, i) => ({ el, top: +el.dataset.top, altura: Math.max(+el.dataset.altura, naturais[i]) })),
+    ].sort((a, b) => a.top - b.top || (a.marca === b.marca ? 0 : a.marca ? -1 : 1));
+
+    let deslocamento = 0;
+    let fimAnterior = -Infinity;
+    for (const item of itens) {
+      let top = item.top + deslocamento;
+      if (!item.marca && top < fimAnterior + GAP) {
+        deslocamento += fimAnterior + GAP - top;
+        top = fimAnterior + GAP;
+      }
+      item.el.style.top = `${top}px`;
+      if (!item.marca) {
+        item.el.style.height = `${item.altura}px`;
+        fimAnterior = top + item.altura;
+      }
+    }
+
+    linha.style.height = `${Math.max(+linha.dataset.altura + deslocamento, fimAnterior + GAP)}px`;
+
+    // A fonte do Google chega depois do primeiro desenho e muda a altura do
+    // texto — sem remedir, um cartão apertado voltaria a cortar. Uma vez só
+    // por render (o dataset marca que já foi agendado).
+    if (!linha.dataset.remedido) {
+      linha.dataset.remedido = '1';
+      document.fonts?.ready.then(() => { if (linha.isConnected) this.posicionarBlocos(area); });
+    }
   },
 
   /** Cartões do dia selecionado e da semana dele (a partir do domingo). Uma consulta só.

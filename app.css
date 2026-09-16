@@ -1167,15 +1167,12 @@
   color: rgba(163, 163, 163, 0.55);
 }
 
-/* Cartão de atendimento/bloqueio/almoço posicionado pelo horário real —
-   top e height vêm inline (ver montarLinhaDoTempo). overflow:hidden corta o
-   que não cabe (serviço curto não cabe o cartão inteiro na altura real) —
-   sem isso, vários serviços curtos em sequência (barba, pezinho...) vazavam
-   um por cima do outro, empilhando texto ilegível. O motivo de ele ter sido
-   tirado antes (travava o dedo no Safari do iPhone) só existia MISTURADO
-   com o vidro fosco (.vidro, backdrop-filter) logo abaixo — como o
-   backdrop-filter já está desligado nesses cartões, overflow:hidden sozinho
-   não recria aquele travamento. */
+/* Cartão de atendimento/bloqueio/almoço posicionado pelo horário real. O top e
+   a altura são aplicados por posicionarBlocos() via JS, nunca em style=""
+   inline — o CSP do site (ver _headers) descarta atributo style, e era isso
+   que derrubava todos os cartões no mesmo ponto no Cloudflare.
+   A altura final nunca é menor que o conteúdo, então o overflow:hidden aqui
+   não chega a cortar nada: fica só como rede de segurança. */
 .linha-tempo__bloco {
   position: absolute;
   left: 3.5rem;
