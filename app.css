@@ -1156,10 +1156,10 @@
 .linha-tempo__hora:not(:empty) {
   padding-top: var(--espaco-3);
   margin-top: var(--espaco-3);
-  border-top: 1px solid var(--cor-borda);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--cor-texto-suave);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: rgba(163, 163, 163, 0.55);
 }
 
 /* Hora do expediente sem nada começando nela — só o espaço, sem cartão */
@@ -1167,7 +1167,7 @@
   min-height: 2.5rem;
   padding-top: var(--espaco-3);
   margin-top: var(--espaco-3);
-  border-top: 1px solid var(--cor-borda);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 /* Hora sem nada começando nela, mas ainda ocupada por um atendimento que vem
