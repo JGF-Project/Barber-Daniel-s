@@ -1149,9 +1149,14 @@
 
 /* Fosca de propósito: Daniel estava confundindo essa marcação de grade
    (a hora cheia, só de referência) com o horário real do agendamento —
-   que já aparece bem destacado dentro do próprio cartão. */
-.linha-tempo__hora {
-  padding-top: var(--espaco-2);
+   que já aparece bem destacado dentro do próprio cartão. Uma linha fina
+   separa cada hora, igual à referência que o Daniel mandou (:not(:empty)
+   pega só a célula que carrega o rótulo, não as vazias dos outros eventos
+   da mesma hora). */
+.linha-tempo__hora:not(:empty) {
+  padding-top: var(--espaco-3);
+  margin-top: var(--espaco-3);
+  border-top: 1px solid var(--cor-borda);
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--cor-texto-suave);
@@ -1160,6 +1165,9 @@
 /* Hora do expediente sem nada começando nela — só o espaço, sem cartão */
 .linha-tempo__vazio {
   min-height: 2.5rem;
+  padding-top: var(--espaco-3);
+  margin-top: var(--espaco-3);
+  border-top: 1px solid var(--cor-borda);
 }
 
 /* Hora sem nada começando nela, mas ainda ocupada por um atendimento que vem
