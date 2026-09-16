@@ -475,7 +475,25 @@ const Agenda = {
     }
 
     area.innerHTML = this.montarLinhaDoTempo(agendamentosRes.data, horarioRes.data, bloqueiosRes.data || [], almoco);
+    this.posicionarBlocos(area);
     this.ligarAcoes(area);
+  },
+
+  /** Aplica as posições da linha do tempo (top/altura em px) por CSSOM.
+   * Tem que ser aqui, e não em style="" no HTML: o CSP do site (ver _headers)
+   * usa style-src sem 'unsafe-inline', então atributo style inline é
+   * silenciosamente descartado — no Cloudflare, que serve esse cabeçalho,
+   * todos os cartões caíam no mesmo ponto, um por cima do outro. Pelo JS a
+   * mesma política permite. */
+  posicionarBlocos(area) {
+    const linha = $('.linha-tempo', area);
+    if (!linha) return;
+    linha.style.height = `${linha.dataset.altura}px`;
+    $$('.linha-tempo__marca', linha).forEach((m) => { m.style.top = `${m.dataset.top}px`; });
+    $$('.linha-tempo__bloco', linha).forEach((b) => {
+      b.style.top = `${b.dataset.top}px`;
+      b.style.height = `${b.dataset.altura}px`;
+    });
   },
 
   /** Cartões do dia selecionado e da semana dele (a partir do domingo). Uma consulta só.
@@ -566,7 +584,7 @@ const Agenda = {
     for (let h = primeiraHora; h <= ultimaHora + 1; h++) {
       const ms = horaParaMs(h);
       if (ms < abre || ms > fecha) continue;
-      marcas.push(`<div class="linha-tempo__marca" style="top:${topoPx(ms)}px"><span class="linha-tempo__hora">${formatarHora(new Date(ms).toISOString())}</span></div>`);
+      marcas.push(`<div class="linha-tempo__marca" data-top="${topoPx(ms)}"><span class="linha-tempo__hora">${formatarHora(new Date(ms).toISOString())}</span></div>`);
     }
 
     const blocos = eventos.map((ev) => {
@@ -576,14 +594,18 @@ const Agenda = {
         : this.blocoAgendamento(ev.agendamento, posicao);
     });
 
-    return `<div class="linha-tempo" style="height:${topoPx(fecha)}px">${marcas.join('')}${blocos.join('')}</div>`;
+    // Posições vão em data-* e são aplicadas por posicionarBlocos() depois de
+    // inserir no DOM: o CSP do site barra style="" inline (ver _headers), e no
+    // Cloudflare — que aplica esse CSP, diferente da Vercel — todo top/height
+    // inline era descartado, empilhando os cartões no mesmo ponto.
+    return `<div class="linha-tempo" data-altura="${topoPx(fecha)}">${marcas.join('')}${blocos.join('')}</div>`;
   },
 
   /** Card do almoço — mesmo visual de "Horário fechado", sem botão de reabrir
    * (o horário vem da configuração do barbeiro, edita-se na aba Barbeiros). */
   blocoAlmoco(inicioMs, fimMs, posicao) {
     return `
-    <article class="bloco-fechado linha-tempo__bloco" style="top:${posicao.top}px;height:${posicao.altura}px">
+    <article class="bloco-fechado linha-tempo__bloco" data-top="${posicao.top}" data-altura="${posicao.altura}">
       <div class="bloco-fechado__topo">
         <span class="bloco-agendamento__hora">${formatarHora(new Date(inicioMs).toISOString())} – ${formatarHora(new Date(fimMs).toISOString())}</span>
       </div>
@@ -594,7 +616,7 @@ const Agenda = {
   /** Faixa listrada de "Horário fechado" — o que o cadeado cria. */
   blocoFechado(b, posicao) {
     return `
-    <article class="bloco-fechado linha-tempo__bloco" data-bloqueio="${b.id}" style="top:${posicao.top}px;height:${posicao.altura}px">
+    <article class="bloco-fechado linha-tempo__bloco" data-bloqueio="${b.id}" data-top="${posicao.top}" data-altura="${posicao.altura}">
       <div class="bloco-fechado__topo">
         <span class="bloco-agendamento__hora">${formatarHora(b.inicio)} – ${formatarHora(b.fim)}</span>
         <button class="acao-apagar acao-reabrir" type="button" aria-label="Reabrir este horário" title="Reabrir este horário">
@@ -634,7 +656,7 @@ const Agenda = {
          </span>`;
 
     return `
-    <article class="bloco-agendamento vidro linha-tempo__bloco" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}" data-inicio="${a.inicio}" data-fim="${a.fim}" style="top:${posicao.top}px;height:${posicao.altura}px">
+    <article class="bloco-agendamento vidro linha-tempo__bloco" data-id="${a.id}" data-valor="${centavos}" data-via-assinatura="${a.via_assinatura}" data-inicio="${a.inicio}" data-fim="${a.fim}" data-top="${posicao.top}" data-altura="${posicao.altura}">
       <div class="bloco-agendamento__topo">
         <span class="bloco-agendamento__hora">
           ${formatarHora(a.inicio)} – ${formatarHora(a.fim)}
