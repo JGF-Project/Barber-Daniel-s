@@ -1147,11 +1147,14 @@
   gap: 0 var(--espaco-2);
 }
 
+/* Fosca de propósito: Daniel estava confundindo essa marcação de grade
+   (a hora cheia, só de referência) com o horário real do agendamento —
+   que já aparece bem destacado dentro do próprio cartão. */
 .linha-tempo__hora {
   padding-top: var(--espaco-2);
   font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--cor-branco);
+  font-weight: 500;
+  color: var(--cor-texto-suave);
 }
 
 /* Hora do expediente sem nada começando nela — só o espaço, sem cartão */

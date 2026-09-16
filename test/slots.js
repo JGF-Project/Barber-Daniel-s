@@ -80,10 +80,11 @@ teste('nunca oferece horário que conflita com atendimento existente', () => {
 });
 
 // --- Limites do expediente ---
-teste('dia vazio começa na abertura e vai até o fechamento', () => {
+teste('dia vazio começa na abertura e não oferece o fechamento como início', () => {
   const r = slots({});
   assert.strictEqual(r[0], '10:00');
-  assert.strictEqual(r[r.length - 1], '20:00', 'o fechamento é um horário válido de início');
+  assert.ok(!r.includes('20:00'), `20:00 é a hora de fechar, não cabe corte. Veio: ${r.join(', ')}`);
+  assert.strictEqual(r[r.length - 1], '19:30', `último horário devia ser 19:30. Veio: ${r[r.length - 1]}`);
 });
 
 teste('segunda abrindo 14:00 (sem almoço) começa em 14:00', () => {
@@ -155,10 +156,10 @@ teste('bloqueio até o fechamento tira o horário-fantasma no fechamento', () =>
   assert.ok(!r.includes('20:00'), `20:00 reabre o horário que ele fechou. Veio: ${r.join(', ')}`);
 });
 
-teste('dia livre continua oferecendo o fechamento como último horário', () => {
-  // sem nada encostado no fechamento, a folga de sempre continua valendo
+teste('20:00 nunca é oferecido quando o dia fecha às 20:00', () => {
+  // clientes marcavam pra hora do fechamento e o corte não cabia
   const r = slots({});
-  assert.ok(r.includes('20:00'), `sem bloqueio nenhum, 20:00 devia continuar disponível. Veio: ${r.join(', ')}`);
+  assert.ok(!r.includes('20:00'), `20:00 é a hora de fechar. Veio: ${r.join(', ')}`);
 });
 
 // --- Vários barbeiros (cliente sem preferência) ---
