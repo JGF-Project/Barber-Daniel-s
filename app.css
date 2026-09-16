@@ -1168,15 +1168,18 @@
 }
 
 /* Cartão de atendimento/bloqueio/almoço posicionado pelo horário real —
-   top e height vêm inline (ver montarLinhaDoTempo). overflow:hidden é
-   deliberado: um serviço bem curto (10-15min) não cabe o cartão inteiro
-   nessa altura, e é melhor cortar o rodapé do que vazar por cima do
-   próximo agendamento. */
+   top e height vêm inline (ver montarLinhaDoTempo). Precisa cortar o que
+   não cabe (serviço curto não cabe o cartão inteiro na altura real) sem
+   usar overflow:hidden: nesse elemento position:absolute + vidro
+   (-webkit-backdrop-filter), overflow:hidden vira uma região de toque
+   própria no Safari do iPhone e trava o dedo — arrastar pra rolar a
+   página só funciona fora do cartão. clip-path corta visualmente igual,
+   sem esse efeito colateral. */
 .linha-tempo__bloco {
   position: absolute;
   left: 3.5rem;
   right: 0;
-  overflow: hidden;
+  clip-path: inset(0);
   box-sizing: border-box;
 }
 
