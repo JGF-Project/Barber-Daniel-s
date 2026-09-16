@@ -437,7 +437,12 @@ const Agenda = {
         .select('id, inicio, fim, status, via_assinatura, valor_centavos, cliente_nome, cliente_celular, agendamento_servicos(servicos(nome, preco_centavos)), perfis(nome, celular)')
         .eq('barbearia_id', BARBEARIA_ID)
         .eq('barbeiro_id', barbeiroId)
-        .neq('status', 'cancelado') // cancelado libera o horário: some do dia, o intervalo aparece como livre
+        // cancelado e falta liberam o horário pro banco (só 'confirmado' conta
+        // como ocupado em horarios_ocupados()) — um cliente pode legitimamente
+        // reagendar em cima de uma falta antiga. Sem excluir 'falta' aqui, o
+        // card fantasma do no-show ficava desenhado por cima do agendamento
+        // novo que ocupou o mesmo horário.
+        .not('status', 'in', '(cancelado,falta)')
         .gte('inicio', inicioDia.toISOString())
         .lt('inicio', fimDia.toISOString())
         .order('inicio', { ascending: true }),
