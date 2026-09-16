@@ -1183,6 +1183,17 @@
   box-sizing: border-box;
 }
 
+/* O vidro fosco (.vidro) borra com backdrop-filter, e isso é caro pro Safari
+   recalcular a cada frame — numa página agora bem mais alta (linha do tempo
+   proporcional) com vários cartões ao mesmo tempo, isso sobrecarregava o
+   iPhone e travava a rolagem, precisando arrastar pra frente e pra trás pra
+   destravar. Atrás dos cartões só tem fundo escuro liso, sem nada colorido
+   pra valer a pena borrar — desligar aqui não muda nada visualmente. */
+.linha-tempo__bloco.vidro {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .bloco-agendamento {
   padding: var(--espaco-2) var(--espaco-3);
 }
