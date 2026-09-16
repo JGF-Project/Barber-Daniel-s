@@ -538,12 +538,14 @@ const Agenda = {
       ...(almoco ? [{ almoco: true, inicio: almoco.inicio, fim: almoco.fim }] : []),
     ].sort((x, y) => x.inicio - y.inicio);
 
-    // ponytail: escala fixa (10px por minuto) — cabe o cartão cheio (nome,
-    // serviço, valor, ações) num corte de uns 30min, o mais comum aqui. Um
-    // serviço avulso bem curto (barba/pezinho sozinhos, 10-15min) pode
-    // cortar o rodapé do cartão por falta de espaço; se incomodar na
-    // prática, a saída é um cartão compacto só pros bem curtos.
-    const PX_POR_MIN = 10;
+    // ponytail: escala fixa (6px por minuto) — mais compacta que a primeira
+    // tentativa (10px/min) porque um dia inteiro naquela escala passava de
+    // 6000px, e páginas tão altas com vários cartões position:absolute
+    // pesavam demais pro Safari do iPhone rolar por toque. Serviço curto
+    // (barba/pezinho, 10-15min) pode encostar visualmente no cartão
+    // seguinte ou cortar o rodapé; se incomodar na prática, a saída é um
+    // cartão compacto só pros bem curtos.
+    const PX_POR_MIN = 6;
     const pxPorMs = PX_POR_MIN / 60000;
     const topoPx = (ms) => Math.round((ms - abre) * pxPorMs);
 
