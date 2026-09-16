@@ -1168,18 +1168,19 @@
 }
 
 /* Cartão de atendimento/bloqueio/almoço posicionado pelo horário real —
-   top e height vêm inline (ver montarLinhaDoTempo). Nada de overflow:hidden
-   nem clip-path aqui: em elementos position:absolute (e são vários ao mesmo
-   tempo, numa página agora bem mais alta), qualquer propriedade que force o
-   Safari do iPhone a promover cada um a uma camada própria (layer) — tanto
-   overflow:hidden quanto clip-path fazem isso — deixa a rolagem por toque
-   travando/emperrando. Um serviço bem curto pode visualmente encostar no
-   cartão seguinte; aceitável, rolagem funcionando vale mais que o corte
-   perfeito nesse caso raro. */
+   top e height vêm inline (ver montarLinhaDoTempo). overflow:hidden corta o
+   que não cabe (serviço curto não cabe o cartão inteiro na altura real) —
+   sem isso, vários serviços curtos em sequência (barba, pezinho...) vazavam
+   um por cima do outro, empilhando texto ilegível. O motivo de ele ter sido
+   tirado antes (travava o dedo no Safari do iPhone) só existia MISTURADO
+   com o vidro fosco (.vidro, backdrop-filter) logo abaixo — como o
+   backdrop-filter já está desligado nesses cartões, overflow:hidden sozinho
+   não recria aquele travamento. */
 .linha-tempo__bloco {
   position: absolute;
   left: 3.5rem;
   right: 0;
+  overflow: hidden;
   box-sizing: border-box;
 }
 
