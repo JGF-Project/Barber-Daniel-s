@@ -1390,6 +1390,56 @@
   cursor: pointer;
 }
 
+/* Lista de serviços marcáveis do "Novo agendamento" — mais de um serviço
+   por encaixe (ex.: corte + barba), duração e valor somam os marcados. */
+.lista-servicos-novo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+  padding: 0.75rem 1.125rem;
+  /* Sem rolagem própria de propósito: uma área rolável dentro do modal
+     trava o toque no iPhone. A lista inteira aparece e o modal cresce. */
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio-pequeno);
+}
+
+/* Especificidade dobrada de propósito: .formulario__campo label (style.css)
+   deixa todo label do formulário em display:block, o que empilharia a
+   caixinha em cima do nome do serviço. */
+.lista-servicos-novo .lista-servicos-novo__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin-bottom: 0;
+  font-weight: 300;
+  color: var(--cor-branco);
+  white-space: normal; /* nome comprido quebra em vez de vazar na tela do celular */
+}
+
+/* .formulario__campo input (style.css) veste todo input do formulário de
+   campo de texto — 52px de altura, padding e borda — e isso esticava a
+   caixinha num retângulo alto com o nome do serviço desalinhado ao lado. */
+.lista-servicos-novo .lista-servicos-novo__item input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  margin-top: 0.1875rem; /* alinha a caixinha com a primeira linha do nome */
+}
+
+.lista-servicos-novo__aviso {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 300;
+  color: var(--cor-texto-suave);
+}
+
 /* Adicionar novo serviço */
 .novo-servico {
   padding: var(--espaco-3);

@@ -2292,7 +2292,7 @@ const NovoAgendamento = {
 
     this.assinanteSelect.addEventListener('change', () => this.alternarAssinante());
     this.data.addEventListener('change', () => this.recarregarHorarios());
-    this.servico.addEventListener('change', () => this.recarregarHorarios());
+    this.servico.addEventListener('change', (e) => { if (e.target.type === 'checkbox') this.recarregarHorarios(); });
     this.horario.addEventListener('change', () => this.limparLivre());
 
     this.celularInput.addEventListener('input', (e) => { e.target.value = mascararCelular(e.target.value); });
@@ -2315,18 +2315,7 @@ const NovoAgendamento = {
     this.modal.hidden = false;
     travarRolagem();
 
-    if (!this.servicos.length) {
-      const { data } = await sb.from('servicos').select('id, nome, duracao_min')
-        .eq('barbearia_id', BARBEARIA_ID).eq('ativo', true).eq('assinatura', false)
-        .order('ordem', { ascending: true, nullsFirst: false });
-      this.servicos = data || [];
-      this.servico.innerHTML = this.servicos
-        .map((s) => `<option value="${s.id}">${escaparHtml(s.nome)} · ${s.duracao_min}min</option>`).join('');
-    }
-    if (!this.assinantes.length) {
-      const { data } = await sb.rpc('assinantes_admin', { p_barbearia: BARBEARIA_ID });
-      this.assinantes = data || [];
-    }
+    await Promise.all([this.carregarServicos(), this.carregarAssinantes()]);
     // Reconstrói o <select> (não só o .value) toda vez que o modal abre: o
     // menu customizado (estilizarSelect) só atualiza o botão visível quando
     // as opções mudam de verdade — só trocar o .value deixaria o botão
@@ -2334,6 +2323,42 @@ const NovoAgendamento = {
     this.assinanteSelect.innerHTML = '<option value="">— Cliente avulso —</option>' + this.assinantes
       .map((a) => `<option value="${a.id}">${escaparHtml(a.nome || a.email)} — ${escaparHtml(a.plano)}</option>`).join('');
     this.alternarAssinante();
+  },
+
+  /* Uma lista que falha não pode derrubar o modal inteiro. No celular do
+     Daniel a busca dos serviços morreu depois do servidor já ter respondido
+     (conexão caindo no meio, 200 no log do Supabase e nada chegando aqui) —
+     como não havia try, a exceção abortava o resto do abrir() e o formulário
+     ficava aberto com serviço E horário vazios, sem explicar nada. Cada
+     carga agora fala por si; reabrir o modal tenta de novo. */
+  async carregarServicos() {
+    if (this.servicos.length) return;
+    this.servico.innerHTML = '<p class="lista-servicos-novo__aviso">Carregando serviços…</p>';
+    try {
+      const { data, error } = await sb.from('servicos').select('id, nome, duracao_min')
+        .eq('barbearia_id', BARBEARIA_ID).eq('ativo', true).eq('assinatura', false)
+        .order('ordem', { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      this.servicos = data || [];
+    } catch {
+      this.servico.innerHTML = '<p class="lista-servicos-novo__aviso">Não deu pra carregar os serviços — feche e abra de novo.</p>';
+      return;
+    }
+    this.servico.innerHTML = this.servicos
+      .map((s) => `
+        <label class="alternador lista-servicos-novo__item">
+          <input type="checkbox" value="${s.id}">
+          <span>${escaparHtml(s.nome)} · ${s.duracao_min}min</span>
+        </label>`).join('');
+  },
+
+  async carregarAssinantes() {
+    if (this.assinantes.length) return;
+    try {
+      const { data, error } = await sb.rpc('assinantes_admin', { p_barbearia: BARBEARIA_ID });
+      if (error) throw error;
+      this.assinantes = data || [];
+    } catch { /* sem a lista de planos ainda dá pra agendar cliente avulso */ }
   },
 
   fechar() { this.modal.hidden = true; destravarRolagem(); },
@@ -2391,12 +2416,20 @@ const NovoAgendamento = {
     this.recarregarHorarios();
   },
 
-  /** Duração de referência do momento: o serviço avulso escolhido, ou o
-   * tempo do plano do assinante (respeitando o tempo combinado com ele). */
+  /** Ids dos serviços avulsos marcados (o cliente pode escolher mais de um —
+   * a duração e o valor final somam todos eles). */
+  servicosSelecionados() {
+    return $$('input[type=checkbox]:checked', this.servico).map((el) => el.value);
+  },
+
+  /** Duração de referência do momento: soma dos serviços avulsos marcados,
+   * ou o tempo do plano do assinante (respeitando o tempo combinado com ele). */
   duracaoAtualMin() {
     const a = this.assinanteAtual();
     if (a) return a.duracao_min ?? a.duracao_padrao;
-    return this.servicos.find((s) => s.id === this.servico.value)?.duracao_min;
+    const ids = this.servicosSelecionados();
+    if (!ids.length) return undefined;
+    return this.servicos.filter((s) => ids.includes(s.id)).reduce((soma, s) => soma + s.duracao_min, 0);
   },
 
   /** Horários livres para o serviço (ou plano) escolhido — mesma regra da
@@ -2467,15 +2500,16 @@ const NovoAgendamento = {
     // que o botão de WhatsApp no card do agendamento usa depois) — sem isso
     // o agendamento seria recusado com um erro sem explicação nenhuma.
     if (!assinante && !celular) return this.mostrarErro('Informe o celular do cliente.');
-    if (!assinante && !this.servico.value) return this.mostrarErro('Escolha um serviço.');
+    const servicoIds = this.servicosSelecionados();
+    if (!assinante && !servicoIds.length) return this.mostrarErro('Escolha ao menos um serviço.');
 
-    // No modo livre o fim vem da barra; senão, é a duração do serviço/plano.
+    // No modo livre o fim vem da barra; senão, é a duração dos serviços/plano.
     const inicio = this.livre ? this.livre.inicio : new Date(+this.horario.value);
     if (!this.livre && !this.horario.value) return this.mostrarErro('Escolha um horário ou use o Livre.');
 
     const { error } = await sb.rpc('admin_criar_agendamento', {
       p_barbeiro: $('#agenda-barbeiro').value,
-      p_servico_ids: assinante ? [] : [this.servico.value],
+      p_servico_ids: assinante ? [] : servicoIds,
       p_inicio: inicio.toISOString(),
       p_nome: nome || null,
       p_celular: celular || null,
@@ -2618,6 +2652,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Dropdowns estilizados em todos os seletores do painel
   ['#agenda-barbeiro', '#horarios-barbeiro', '#relatorios-barbeiro', '#ausencias-barbeiro', '#assinante-plano',
-   '#fechar-janela', '#novo-assinante', '#novo-servico', '#novo-horario', '#livre-janela']
+   '#fechar-janela', '#novo-assinante', '#novo-horario', '#livre-janela']
     .forEach((sel) => { const el = $(sel); if (el) estilizarSelect(el); });
 });
