@@ -2344,10 +2344,13 @@ const NovoAgendamento = {
       this.servico.innerHTML = '<p class="lista-servicos-novo__aviso">Não deu pra carregar os serviços — feche e abra de novo.</p>';
       return;
     }
+    // O primeiro vem marcado — sem isso o Horário abre em "Escolha um
+    // serviço" até o barbeiro tocar numa caixinha (o <select> antigo sempre
+    // vinha com uma opção pré-selecionada, então o horário já aparecia).
     this.servico.innerHTML = this.servicos
-      .map((s) => `
+      .map((s, i) => `
         <label class="alternador lista-servicos-novo__item">
-          <input type="checkbox" value="${s.id}">
+          <input type="checkbox" value="${s.id}" ${i === 0 ? 'checked' : ''}>
           <span>${escaparHtml(s.nome)} · ${s.duracao_min}min</span>
         </label>`).join('');
   },
