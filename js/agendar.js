@@ -42,6 +42,15 @@ function planoSelecionado() {
   return Estado.servicosEscolhidos.some((s) => s.assinatura);
 }
 
+/** Ymd do sábado da semana corrente (semana da assinatura começa domingo).
+ * Pedido do Daniel: assinante só agenda dentro da semana atual — a semana
+ * seguinte só libera quando o domingo dela chega, não antes. */
+function sabadoDaSemanaYmd() {
+  const hoje = partesNoFuso(new Date());
+  const diasAteSabado = 6 - hoje.diaSemana;
+  return partesNoFuso(new Date(Date.now() + diasAteSabado * 86400000)).ymd;
+}
+
 /* ============================================================
    MODAL — substitui os pop-ups nativos (window.confirm/alert)
 ============================================================ */
@@ -633,9 +642,11 @@ const Agendamento = {
 
   /** Dia disponível: existe ao menos 1 barbeiro (dos relevantes) aberto e sem ausência cobrindo o dia todo */
   diaDisponivel(ymd, diaSemana) {
-    // Plano mensal atende exclusivamente de segunda a sexta (regulamento).
-    // Sem isso a pessoa escolheria sábado e só levaria o erro na confirmação.
-    if (planoSelecionado() && (diaSemana === 0 || diaSemana === 6)) return false;
+    // Plano mensal atende exclusivamente de segunda a sexta (regulamento),
+    // e só dentro da semana corrente — a próxima semana libera no domingo
+    // dela, não antes. Sem isso a pessoa escolheria sábado, domingo ou uma
+    // semana futura e só levaria o erro na confirmação.
+    if (planoSelecionado() && (diaSemana === 0 || diaSemana === 6 || ymd > sabadoDaSemanaYmd())) return false;
 
     return this.barbeiroIds().some((id) => {
       const config = (Estado.horariosPorBarbeiro[id] || {})[diaSemana];
