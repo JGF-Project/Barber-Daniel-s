@@ -1494,6 +1494,39 @@
   color: var(--cor-texto-suave);
 }
 
+/* Mensalidade do assinante: contorno dourado = falta pagar, preenchido = paga */
+.valor-plano {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.botao-pago {
+  padding: 0.375rem 0.75rem;
+  font-family: var(--fonte-texto);
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--cor-dourado);
+  background: transparent;
+  border: 1px solid var(--cor-borda-dourada);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background var(--transicao-rapida), color var(--transicao-rapida);
+}
+
+.botao-pago:hover {
+  background: rgba(200, 162, 74, 0.12);
+}
+
+.botao-pago--ok,
+.botao-pago--ok:hover {
+  color: #111;
+  background: var(--cor-dourado);
+  border-color: var(--cor-dourado);
+}
+
 /* Barbeiro funcionário (Nicolas): só vê a própria agenda e o próprio
    faturamento. Esconder aqui é só visual — quem barra é a RLS no banco. */
 .modo-barbeiro .so-admin,

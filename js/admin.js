@@ -314,6 +314,53 @@ function pedirDuracao(minutosAtuais, { titulo = 'Tempo do atendimento', texto = 
 }
 
 /* ============================================================
+   MENSALIDADE PAGA
+   A partir de out/2026 a mensalidade do assinante só entra no faturamento
+   quando o Daniel marca "pago" — antes disso (setembro) tudo era somado
+   automaticamente, e o relatório daquele mês continua assim.
+============================================================ */
+const INICIO_MENSALIDADE_PAGA = '2026-10-01';
+
+/** "2026-10-01" a partir de um "2026-10-17" */
+const mesDoDia = (ymd) => `${ymd.slice(0, 7)}-01`;
+
+const NOMES_MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
+  'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+const nomeDoMes = (mes) => NOMES_MESES[Number(mes.slice(5, 7)) - 1];
+
+/** Marca/desmarca a mensalidade de um mês. Um registro por assinatura por
+ * mês — marcar pela aba Assinantes ou pelo cartão ♛ da agenda é a mesma
+ * coisa. Devolve true se mudou algo. */
+async function alternarPagamento(assinaturaId, mes, pago) {
+  if (pago) {
+    const ok = await confirmar({
+      titulo: 'Desmarcar pagamento?',
+      texto: `A mensalidade de ${nomeDoMes(mes)} sai do faturamento.`,
+      confirmarLabel: 'Sim, desmarcar',
+    });
+    if (!ok) return false;
+    const { error } = await sb.from('pagamentos_assinatura').delete()
+      .eq('assinatura_id', assinaturaId).eq('mes', mes);
+    if (error) { feedback('Não foi possível desmarcar. Tente novamente.', 'erro'); return false; }
+    feedback(`Pagamento de ${nomeDoMes(mes)} desmarcado.`);
+    return true;
+  }
+  // barbearia e valor são preenchidos pelo banco (trigger), não daqui
+  const { error } = await sb.from('pagamentos_assinatura').insert({ assinatura_id: assinaturaId, mes });
+  // 23505 = já estava pago (marcado em outra aba/aparelho) — o objetivo foi atingido
+  if (error && error.code !== '23505') { feedback('Não foi possível marcar como pago. Tente novamente.', 'erro'); return false; }
+  feedback(`Mensalidade de ${nomeDoMes(mes)} marcada como paga.`);
+  return true;
+}
+
+/** Depois de marcar/desmarcar, tudo que mostra pagamento se atualiza junto. */
+function aposPagamento() {
+  Agenda.carregar();
+  Assinantes.carregar();
+  Relatorios.carregar();
+}
+
+/* ============================================================
    AGENDA
 ============================================================ */
 const Agenda = {
@@ -454,7 +501,7 @@ const Agenda = {
 
     const [agendamentosRes, horarioRes, bloqueiosRes] = await Promise.all([
       sb.from('agendamentos')
-        .select('id, inicio, fim, status, via_assinatura, valor_centavos, cliente_nome, cliente_celular, agendamento_servicos(servicos(nome, preco_centavos)), perfis(nome, celular)')
+        .select('id, inicio, fim, status, via_assinatura, valor_centavos, cliente_id, cliente_nome, cliente_celular, agendamento_servicos(servicos(nome, preco_centavos)), perfis(nome, celular)')
         .eq('barbearia_id', BARBEARIA_ID)
         .eq('barbeiro_id', barbeiroId)
         // cancelado e falta liberam o horário pro banco (só 'confirmado' conta
@@ -494,9 +541,31 @@ const Agenda = {
       if (almIni < fecha && almFim > abre) almoco = { inicio: Math.max(almIni, abre), fim: Math.min(almFim, fecha) };
     }
 
+    const pagamentos = await this.carregarPagamentos(agendamentosRes.data);
+    this.pagamentos = pagamentos; // junto do render: outra carga em paralelo não troca o mês por baixo
     area.innerHTML = this.montarLinhaDoTempo(agendamentosRes.data, horarioRes.data, bloqueiosRes.data || [], almoco);
     this.posicionarBlocos(area);
     this.ligarAcoes(area);
+  },
+
+  /** Pro botão "pago" dos cartões ♛: qual assinatura é de cada cliente e
+   * quais já pagaram o mês do dia exibido. Só busca se houver visita de
+   * plano no dia e o mês já estiver na regra nova (out/2026 em diante). O
+   * barbeiro funcionário não vê isso (e a RLS nem deixaria). */
+  async carregarPagamentos(agendamentos) {
+    const mes = mesDoDia(this.dia);
+    if (Estado.meuBarbeiro || mes < INICIO_MENSALIDADE_PAGA || !agendamentos.some((a) => a.via_assinatura)) return null;
+
+    const [assinantes, pagos] = await Promise.all([
+      sb.rpc('assinantes_admin', { p_barbearia: BARBEARIA_ID }),
+      sb.from('pagamentos_assinatura').select('assinatura_id').eq('barbearia_id', BARBEARIA_ID).eq('mes', mes),
+    ]);
+    if (assinantes.error || pagos.error) return null; // sem o botão, mas a agenda aparece normal
+    return {
+      mes,
+      assinaturaDe: new Map((assinantes.data || []).filter((a) => a.usuario_id).map((a) => [a.usuario_id, a.id])),
+      pagos: new Set((pagos.data || []).map((p) => p.assinatura_id)),
+    };
   },
 
   /** Aplica as posições da linha do tempo (top/altura em px) por CSSOM.
@@ -705,8 +774,16 @@ const Agenda = {
     // Valor cobrado de fato: o que o barbeiro editou, ou a soma dos serviços.
     const centavos = valorCobrado(a);
     const editado = a.valor_centavos !== null && a.valor_centavos !== undefined;
+    const assinaturaId = a.via_assinatura && this.pagamentos?.assinaturaDe.get(a.cliente_id);
+    const pago = assinaturaId && this.pagamentos.pagos.has(assinaturaId);
+    const botaoPago = assinaturaId
+      ? `<button class="botao-pago${pago ? ' botao-pago--ok' : ''}" type="button" data-assinatura="${assinaturaId}" data-mes="${this.pagamentos.mes}" data-pago="${pago}"
+           title="${pago ? 'Mensalidade paga — toque para desmarcar' : `Marcar a mensalidade de ${nomeDoMes(this.pagamentos.mes)} como paga`}">
+           ${pago ? '✓ Mensalidade paga' : 'Marcar pago'}
+         </button>`
+      : '';
     const blocoValor = a.via_assinatura
-      ? '<span class="valor-display">incluso no plano</span>'
+      ? `<span class="valor-plano"><span class="valor-display">incluso no plano</span>${botaoPago}</span>`
       : `<span class="valor-editar" data-centavos="${centavos}">
            <span class="valor-display">${formatarPreco(centavos)}</span>
            ${editado ? '<span class="valor-marca" title="Valor editado pelo barbeiro">editado</span>' : ''}
@@ -759,6 +836,12 @@ const Agenda = {
           : `Valor atualizado para ${formatarPreco(centavos)}.`);
         this.carregar();
         Relatorios.carregar(); // faturamento acompanha o valor editado
+      });
+    });
+
+    $$('.botao-pago', area).forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (await alternarPagamento(b.dataset.assinatura, b.dataset.mes, b.dataset.pago === 'true')) aposPagamento();
       });
     });
 
@@ -1019,16 +1102,24 @@ const Assinantes = {
   async carregar() {
     const area = $('#lista-assinantes');
 
-    const [planos, assinantes] = await Promise.all([
+    // Botão "pago" só a partir de out/2026 — em setembro a mensalidade ainda
+    // entra sozinha no faturamento, marcar não mudaria nada e só confundiria.
+    const mes = mesDoDia(partesNoFuso(new Date()).ymd);
+    const comPagamento = mes >= INICIO_MENSALIDADE_PAGA;
+
+    const [planos, assinantes, pagos] = await Promise.all([
       // Pezinho é bônus automático de quem já tem plano de corte, não algo
       // que se atribui direto — por isso fica fora deste dropdown.
       sb.from('servicos').select('id, nome, descricao, preco_centavos, duracao_min')
         .eq('barbearia_id', BARBEARIA_ID).eq('assinatura', true).eq('ativo', true)
         .eq('categoria_assinatura', 'corte').order('preco_centavos'),
       sb.rpc('assinantes_admin', { p_barbearia: BARBEARIA_ID }),
+      comPagamento
+        ? sb.from('pagamentos_assinatura').select('assinatura_id').eq('barbearia_id', BARBEARIA_ID).eq('mes', mes)
+        : Promise.resolve({ data: [] }),
     ]);
 
-    if (planos.error || assinantes.error) {
+    if (planos.error || assinantes.error || pagos.error) {
       area.innerHTML = '<p class="app-erro">Erro ao carregar os assinantes.</p>';
       return;
     }
@@ -1067,9 +1158,12 @@ const Assinantes = {
       return;
     }
 
+    const pagosSet = new Set((pagos.data || []).map((p) => p.assinatura_id));
+
     area.innerHTML = lista
       .map((a) => {
         const restantes = Math.max(0, 4 - a.usados_mes);
+        const pago = pagosSet.has(a.id);
         return `
         <article class="cartao-agendamento vidro" data-id="${a.id}">
           <div class="cartao-agendamento__info">
@@ -1092,6 +1186,10 @@ const Assinantes = {
             <span class="etiqueta-status ${a.tem_conta ? 'etiqueta-status--concluido' : 'etiqueta-status--cancelado'}">
               ${a.tem_conta ? 'Ativo' : 'Sem conta'}
             </span>
+            ${comPagamento ? `
+            <button class="botao-pago${pago ? ' botao-pago--ok' : ''}" type="button" data-assinatura="${a.id}" data-mes="${mes}" data-pago="${pago}">
+              ${pago ? `✓ Pago · ${nomeDoMes(mes)}` : `Marcar pago · ${nomeDoMes(mes)}`}
+            </button>` : ''}
             <button class="botao botao--perigo botao--pequeno acao-remover-assinante" type="button">Remover</button>
           </div>
         </article>`;
@@ -1100,6 +1198,12 @@ const Assinantes = {
 
     $$('.acao-remover-assinante', area).forEach((botao) =>
       botao.addEventListener('click', () => this.remover(botao.closest('[data-id]'))));
+
+    $$('.botao-pago', area).forEach((b) => {
+      b.addEventListener('click', async () => {
+        if (await alternarPagamento(b.dataset.assinatura, b.dataset.mes, b.dataset.pago === 'true')) aposPagamento();
+      });
+    });
 
     // Tempo de corte combinado com esse cliente: vale sempre que ele agendar
     // pelo plano, sem o Daniel precisar ajustar depois. Não afeta o pezinho.
@@ -1809,6 +1913,13 @@ const Relatorios = {
     const buscaAssinantes = comMensalidades
       ? sb.from('assinaturas').select('servicos(mensalidade_centavos)').eq('barbearia_id', BARBEARIA_ID)
       : Promise.resolve({ data: [] });
+    // De out/2026 em diante só entra a mensalidade marcada como paga (com o
+    // valor congelado no dia do pagamento). Setembro segue somando tudo.
+    const mesAtual = mesDoDia(partesNoFuso(new Date()).ymd);
+    const soPagas = comMensalidades && mesAtual >= INICIO_MENSALIDADE_PAGA;
+    const buscaPagas = soPagas
+      ? sb.from('pagamentos_assinatura').select('valor_centavos').eq('barbearia_id', BARBEARIA_ID).eq('mes', mesAtual)
+      : Promise.resolve({ data: [] });
 
     // Comissão só existe pra barbeiro funcionário (linha em equipe) — o
     // próprio Daniel não tem, então no filtro dele nada aparece.
@@ -1816,14 +1927,15 @@ const Relatorios = {
       ? sb.from('equipe').select('comissao_pct').eq('barbeiro_id', barbeiroId).maybeSingle()
       : Promise.resolve({ data: null });
 
-    const [atual, anterior, assinantes, comissaoRes] = await Promise.all([
+    const [atual, anterior, assinantes, comissaoRes, pagas] = await Promise.all([
       consulta(inicio, fim, 'status, inicio, via_assinatura, valor_centavos, agendamento_servicos(servicos(nome, preco_centavos))'),
       buscaAnterior,
       buscaAssinantes,
       buscaComissao,
+      buscaPagas,
     ]);
 
-    if (atual.error || anterior.error || assinantes.error) {
+    if (atual.error || anterior.error || assinantes.error || pagas.error) {
       area.innerHTML = '<p class="app-erro">Erro ao carregar os relatórios.</p>';
       return;
     }
@@ -1836,8 +1948,9 @@ const Relatorios = {
     const ativos = data.filter((a) => a.status !== 'cancelado');
     // Só o que foi cobrado no balcão: visita de assinante vale 0 aqui.
     const faturamentoServicos = concluidos.reduce((s, a) => s + valorCobrado(a), 0);
-    const mensalidades = (assinantes.data || [])
-      .reduce((s, a) => s + (a.servicos?.mensalidade_centavos || 0), 0);
+    const mensalidades = soPagas
+      ? (pagas.data || []).reduce((s, p) => s + p.valor_centavos, 0)
+      : (assinantes.data || []).reduce((s, a) => s + (a.servicos?.mensalidade_centavos || 0), 0);
     const faturamento = faturamentoServicos + mensalidades;
 
     const prevConcluidos = anterior.data.filter(prestado);
@@ -1862,6 +1975,7 @@ const Relatorios = {
       faturamentoServicos,
       mensalidades,
       assinantes: (assinantes.data || []).length,
+      pagas: soPagas ? (pagas.data || []).length : null,
       comMensalidades,
       // Compara só serviços: não há histórico de assinantes para comparar
       // mensalidade de um mês com a do outro.
@@ -1907,7 +2021,7 @@ const Relatorios = {
         <div class="rel-financeiro__topo">
           <span class="rel-financeiro__rotulo">Faturamento ${m.comPeriodo ? 'do período' : 'do mês'}</span>
           <span class="rel-financeiro__nota">${m.comMensalidades
-            ? 'Serviços do mês + mensalidades'
+            ? (m.pagas !== null ? 'Serviços do mês + mensalidades pagas' : 'Serviços do mês + mensalidades')
             : 'Somente serviços realizados no período'}</span>
         </div>
         <strong class="rel-financeiro__valor">${formatarPreco(m.faturamento)}</strong>
@@ -1929,7 +2043,9 @@ const Relatorios = {
           </div>
           ${m.comMensalidades ? `
           <div>
-            <span>Mensalidades${m.assinantes ? ` · ${m.assinantes} assinante${m.assinantes > 1 ? 's' : ''}` : ''}</span>
+            <span>Mensalidades${m.pagas !== null
+              ? ` · ${m.pagas} de ${m.assinantes} pagas`
+              : (m.assinantes ? ` · ${m.assinantes} assinante${m.assinantes > 1 ? 's' : ''}` : '')}</span>
             <strong>${formatarPreco(m.mensalidades)}</strong>
           </div>` : ''}
           <div>
