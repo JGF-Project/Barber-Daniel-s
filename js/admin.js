@@ -11,6 +11,7 @@
 const Estado = {
   sessao: null,
   ehAdmin: false,
+  meuBarbeiro: null, // id do barbeiro funcionário logado (modo restrito), ou null
 };
 
 /* ============================================================
@@ -112,12 +113,18 @@ const AuthAdmin = {
     // Admin é por barbearia: a mesma conta pode administrar várias unidades.
     // Aqui só decidimos o que mostrar — quem garante de verdade é a RLS,
     // que usa essa mesma função nas policies.
-    const [{ data: ehAdmin }, { data: perfil }] = await Promise.all([
+    const [{ data: ehAdmin }, { data: meuBarbeiro }, { data: perfil }] = await Promise.all([
       sb.rpc('sou_admin_de', { p_barbearia: BARBEARIA_ID }),
+      sb.rpc('meu_barbeiro', { p_barbearia: BARBEARIA_ID }),
       sb.from('perfis').select('nome').eq('id', Estado.sessao.user.id).maybeSingle(),
     ]);
 
     Estado.ehAdmin = ehAdmin === true;
+    Estado.meuBarbeiro = Estado.ehAdmin ? null : meuBarbeiro || null;
+    // Barbeiro funcionário (Nicolas): mesmo painel, só Agenda e Relatórios
+    // dele, sem nenhum botão de ação. Esconder é só conforto visual — quem
+    // barra de verdade é a RLS (ele só lê o que é dele e não escreve nada).
+    document.body.classList.toggle('modo-barbeiro', Boolean(Estado.meuBarbeiro));
     usuario.hidden = false;
     $('#usuario-nome').textContent = perfil?.nome || Estado.sessao.user.email;
     login.hidden = true;
@@ -130,6 +137,12 @@ const AuthAdmin = {
       Servicos.carregar();
       Assinantes.carregar();
       Barbeiros.carregar(); // popula barbeiros e, em seguida, o seletor + horários
+    } else if (Estado.meuBarbeiro) {
+      painel.hidden = false;
+      semAcesso.hidden = true;
+      const { data: barbeiro } = await sb.from('barbeiros').select('*').eq('id', Estado.meuBarbeiro).maybeSingle();
+      Agenda.popularSeletor(barbeiro ? [barbeiro] : []);
+      Relatorios.carregar();
     } else {
       painel.hidden = true;
       semAcesso.hidden = false;
@@ -1201,11 +1214,12 @@ const Barbeiros = {
 
   async carregar() {
     const area = $('#lista-barbeiros-admin');
-    const { data, error } = await sb
-      .from('barbeiros')
-      .select('*')
-      .eq('barbearia_id', BARBEARIA_ID)
-      .order('criado_em');
+    const [{ data, error }, { data: equipe }] = await Promise.all([
+      sb.from('barbeiros').select('*').eq('barbearia_id', BARBEARIA_ID).order('criado_em'),
+      sb.from('equipe').select('barbeiro_id, comissao_pct'),
+    ]);
+    // Só barbeiro funcionário tem comissão — o dono não tem linha em equipe.
+    const comissaoDe = new Map((equipe || []).map((e) => [e.barbeiro_id, Number(e.comissao_pct)]));
 
     if (error) {
       area.innerHTML = '<p class="app-erro">Erro ao carregar barbeiros.</p>';
@@ -1228,6 +1242,12 @@ const Barbeiros = {
               <input type="text" name="nome" value="${escaparHtml(b.nome)}" maxlength="80" required>
             </label>
           </div>
+          ${comissaoDe.has(b.id) ? `
+          <div class="formulario__campo">
+            <label>Comissão (%)
+              <input type="number" name="comissao" value="${comissaoDe.get(b.id)}" min="0" max="100" step="0.5" inputmode="decimal" required>
+            </label>
+          </div>` : ''}
           <div class="linha-servico__acoes">
             <button class="botao botao--primario botao--pequeno" type="submit">Salvar</button>
             <button class="botao botao--perigo botao--pequeno acao-remover-barbeiro" type="button">Remover</button>
@@ -1286,11 +1306,23 @@ const Barbeiros = {
     const nome = form.nome.value.trim();
     if (nome.length < 2) return feedback('Informe o nome do barbeiro.', 'erro');
 
-    const { error } = await sb.from('barbeiros').update({ nome }).eq('id', form.dataset.id);
-    if (error) return feedback('Não foi possível salvar o nome.', 'erro');
+    const campoComissao = form.elements.comissao;
+    const comissao = campoComissao ? Number(campoComissao.value.replace(',', '.')) : null;
+    if (campoComissao && !(Number.isFinite(comissao) && comissao >= 0 && comissao <= 100)) {
+      return feedback('A comissão precisa ficar entre 0% e 100%.', 'erro');
+    }
 
-    feedback('Nome do barbeiro atualizado.');
+    const [{ error }, { error: erroComissao }] = await Promise.all([
+      sb.from('barbeiros').update({ nome }).eq('id', form.dataset.id),
+      campoComissao
+        ? sb.from('equipe').update({ comissao_pct: comissao }).eq('barbeiro_id', form.dataset.id)
+        : Promise.resolve({ error: null }),
+    ]);
+    if (error || erroComissao) return feedback('Não foi possível salvar. Tente novamente.', 'erro');
+
+    feedback(campoComissao ? `Barbeiro atualizado · comissão de ${String(comissao).replace('.', ',')}%.` : 'Nome do barbeiro atualizado.');
     this.carregar();
+    if (campoComissao) Relatorios.carregar(); // a comissão do relatório acompanha na hora
   },
 
   async remover(linha) {
@@ -1754,7 +1786,7 @@ const Relatorios = {
     }
     $('#relatorios-mes').textContent = rotulo;
 
-    const barbeiroId = $('#relatorios-barbeiro')?.value;
+    const barbeiroId = Estado.meuBarbeiro || $('#relatorios-barbeiro')?.value;
     const consulta = (de, ate, campos) => {
       let q = sb.from('agendamentos').select(campos)
         .eq('barbearia_id', BARBEARIA_ID)
@@ -1778,10 +1810,17 @@ const Relatorios = {
       ? sb.from('assinaturas').select('servicos(mensalidade_centavos)').eq('barbearia_id', BARBEARIA_ID)
       : Promise.resolve({ data: [] });
 
-    const [atual, anterior, assinantes] = await Promise.all([
+    // Comissão só existe pra barbeiro funcionário (linha em equipe) — o
+    // próprio Daniel não tem, então no filtro dele nada aparece.
+    const buscaComissao = barbeiroId
+      ? sb.from('equipe').select('comissao_pct').eq('barbeiro_id', barbeiroId).maybeSingle()
+      : Promise.resolve({ data: null });
+
+    const [atual, anterior, assinantes, comissaoRes] = await Promise.all([
       consulta(inicio, fim, 'status, inicio, via_assinatura, valor_centavos, agendamento_servicos(servicos(nome, preco_centavos))'),
       buscaAnterior,
       buscaAssinantes,
+      buscaComissao,
     ]);
 
     if (atual.error || anterior.error || assinantes.error) {
@@ -1807,8 +1846,15 @@ const Relatorios = {
     // cada serviço individual dos agendamentos ativos (um agendamento pode ter vários)
     const servicosVendidos = ativos.flatMap((a) => servicosResumo(a).itens);
 
+    const pct = comissaoRes.data ? Number(comissaoRes.data.comissao_pct) : null;
+
     area.innerHTML = this.render({
       comPeriodo,
+      comissao: pct === null ? null : {
+        pct,
+        valor: Math.round((faturamentoServicos * pct) / 100),
+        rotulo: Estado.meuBarbeiro ? 'Sua comissão' : 'Comissão',
+      },
       concluidos: concluidos.length,
       agendados: data.filter((a) => a.status === 'confirmado').length,
       cancelados: data.filter((a) => a.status === 'cancelado').length,
@@ -1865,6 +1911,11 @@ const Relatorios = {
             : 'Somente serviços realizados no período'}</span>
         </div>
         <strong class="rel-financeiro__valor">${formatarPreco(m.faturamento)}</strong>
+        ${m.comissao ? `
+        <p class="rel-comissao">
+          <span>${m.comissao.rotulo} (${String(m.comissao.pct).replace('.', ',')}%)</span>
+          <strong>${formatarPreco(m.comissao.valor)}</strong>
+        </p>` : ''}
         ${m.comPeriodo ? '' : `
         <p class="rel-comparacao">
           <span class="rel-variacao rel-variacao--${m.varFaturamento.cls}">Serviços: ${m.varFaturamento.txt}</span>
@@ -2296,6 +2347,18 @@ const NovoAgendamento = {
     this.horario.addEventListener('change', () => this.limparLivre());
 
     this.celularInput.addEventListener('input', (e) => { e.target.value = mascararCelular(e.target.value); });
+
+    this.sugestoes = $('#novo-cliente-sugestoes');
+    this.nomeInput.addEventListener('input', () => this.buscarClientes());
+    this.nomeInput.addEventListener('blur', () => { this.sugestoes.hidden = true; });
+    // Sem isto, tocar na sugestão tira o foco do campo primeiro, o blur
+    // esconde a lista e o clique cai no vazio.
+    this.sugestoes.addEventListener('pointerdown', (e) => e.preventDefault());
+    this.sugestoes.addEventListener('click', (e) => {
+      const item = e.target.closest('[data-i]');
+      if (item) this.escolherCliente(this.encontrados[+item.dataset.i]);
+    });
+
     $('#novo-livre').addEventListener('click', () => this.abrirLivre());
     $('#form-livre').addEventListener('submit', (e) => this.confirmarLivre(e));
     $('#form-novo-agendamento').addEventListener('submit', (e) => this.salvar(e));
@@ -2311,6 +2374,7 @@ const NovoAgendamento = {
     this.limparLivre();
     this.nomeInput.value = '';
     this.celularInput.value = '';
+    this.sugestoes.hidden = true;
     this.data.value = Agenda.dia;
     this.modal.hidden = false;
     travarRolagem();
@@ -2366,6 +2430,62 @@ const NovoAgendamento = {
 
   fechar() { this.modal.hidden = true; destravarRolagem(); },
 
+  /** Digitou "Bruno" → lista todo Bruno conhecido pra tocar e preencher
+   * nome + celular: quem tem conta no site e quem o Daniel já encaixou
+   * antes sem cadastro. Ele nem sempre sabe o sobrenome de todo mundo.
+   * ponytail: ilike não ignora acento ("joao" não acha "João") — resolver
+   * exigiria a extensão unaccent + uma RPC; só vale se virar reclamação. */
+  buscarClientes() {
+    clearTimeout(this._timerBusca);
+    const termo = this.nomeInput.value.trim();
+    if (this.nomeInput.readOnly || termo.length < 2) {
+      this._pedidoBusca = (this._pedidoBusca || 0) + 1; // descarta resposta que ainda estiver a caminho
+      this.sugestoes.hidden = true;
+      return;
+    }
+    this._timerBusca = setTimeout(async () => {
+      const pedido = this._pedidoBusca = (this._pedidoBusca || 0) + 1;
+      // % e _ são curingas do ilike — escapados pra valer como texto digitado
+      const padrao = `%${termo.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      const [contas, avulsos] = await Promise.all([
+        sb.from('perfis').select('nome, celular')
+          .eq('barbearia_id', BARBEARIA_ID).eq('papel', 'cliente')
+          .ilike('nome', padrao).order('nome').limit(8),
+        sb.from('agendamentos').select('cliente_nome, cliente_celular')
+          .eq('barbearia_id', BARBEARIA_ID).is('cliente_id', null)
+          .ilike('cliente_nome', padrao).order('inicio', { ascending: false }).limit(30),
+      ]);
+      if (pedido !== this._pedidoBusca) return; // chegou depois de uma digitação mais nova
+
+      // Mesma pessoa aparece uma vez só (avulso costuma se repetir a cada visita).
+      const vistos = new Set();
+      const lista = [
+        ...(contas.data || []).map((p) => ({ nome: p.nome, celular: p.celular })),
+        ...(avulsos.data || []).map((a) => ({ nome: a.cliente_nome, celular: a.cliente_celular, semCadastro: true })),
+      ].filter((c) => {
+        if (!c.nome) return false;
+        const chave = `${c.nome.trim().toLowerCase()}|${(c.celular || '').replace(/\D/g, '')}`;
+        if (vistos.has(chave)) return false;
+        vistos.add(chave);
+        return true;
+      }).slice(0, 8);
+
+      this.encontrados = lista;
+      this.sugestoes.innerHTML = lista.map((c, i) => `
+        <button class="sugestoes-cliente__item" type="button" role="option" data-i="${i}">
+          <strong>${escaparHtml(c.nome)}</strong>
+          <span>${escaparHtml(c.celular ? mascararCelular(c.celular) : 'sem celular')}${c.semCadastro ? ' · sem cadastro' : ''}</span>
+        </button>`).join('');
+      this.sugestoes.hidden = !lista.length;
+    }, 200);
+  },
+
+  escolherCliente(c) {
+    this.nomeInput.value = c.nome;
+    if (c.celular) this.celularInput.value = mascararCelular(c.celular);
+    this.sugestoes.hidden = true;
+  },
+
   limparLivre() {
     this.livre = null;
     this.aviso.hidden = true;
@@ -2384,6 +2504,7 @@ const NovoAgendamento = {
    * descobrir o problema quando o banco recusar. */
   alternarAssinante() {
     const a = this.assinanteAtual();
+    this.sugestoes.hidden = true;
 
     if (!a) {
       this.campoCliente.hidden = false;

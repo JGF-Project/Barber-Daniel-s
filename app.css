@@ -1440,6 +1440,70 @@
   color: var(--cor-texto-suave);
 }
 
+/* Clientes encontrados ao digitar o nome no Novo agendamento. No fluxo
+   normal (não flutuante): empurra o Celular pra baixo em vez de cobrir. */
+.sugestoes-cliente {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.375rem;
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda-dourada);
+  border-radius: var(--raio-pequeno);
+  overflow: hidden;
+}
+
+/* display:flex acima venceria o [hidden] padrão do navegador */
+.sugestoes-cliente[hidden] {
+  display: none;
+}
+
+.sugestoes-cliente__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.75rem 1.125rem;
+  text-align: left;
+  font-family: var(--fonte-texto);
+  color: var(--cor-branco);
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--cor-borda);
+  cursor: pointer;
+}
+
+.sugestoes-cliente__item:first-child {
+  border-top: 0;
+}
+
+.sugestoes-cliente__item:hover,
+.sugestoes-cliente__item:focus-visible {
+  background: rgba(200, 162, 74, 0.1);
+  outline: none;
+}
+
+.sugestoes-cliente__item strong {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.sugestoes-cliente__item span {
+  font-size: 0.8125rem;
+  font-weight: 300;
+  color: var(--cor-texto-suave);
+}
+
+/* Barbeiro funcionário (Nicolas): só vê a própria agenda e o próprio
+   faturamento. Esconder aqui é só visual — quem barra é a RLS no banco. */
+.modo-barbeiro .so-admin,
+.modo-barbeiro .valor-btn,
+.modo-barbeiro .acao-duracao,
+.modo-barbeiro .acao-reabrir,
+.modo-barbeiro .cartao-agendamento__acoes {
+  display: none !important;
+}
+
 /* Adicionar novo serviço */
 .novo-servico {
   padding: var(--espaco-3);
@@ -1980,6 +2044,27 @@ input[type="datetime-local"] {
   font-size: clamp(2.25rem, 1.6rem + 3vw, 3.25rem);
   line-height: 1;
   color: var(--cor-dourado-claro);
+}
+
+/* Comissão do barbeiro funcionário, logo abaixo do faturamento dele */
+.rel-comissao {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--espaco-2);
+  margin: 0 0 var(--espaco-3);
+  padding: var(--espaco-2) 0;
+  border-top: 1px solid var(--cor-borda);
+  border-bottom: 1px solid var(--cor-borda);
+  font-size: 0.9375rem;
+  color: var(--cor-texto-suave);
+}
+
+.rel-comissao strong {
+  font-family: var(--fonte-titulo);
+  font-size: 1.625rem;
+  font-weight: 400;
+  color: var(--cor-dourado);
 }
 
 .rel-financeiro__extra {
