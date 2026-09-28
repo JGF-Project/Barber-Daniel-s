@@ -334,16 +334,22 @@
   cursor: default;
 }
 
-/* Dias livres (clicáveis) — ganham o "tile" escuro */
+/* Dias livres (clicáveis) — a mesma borda dourada sutil usada em outras
+   pílulas do site (ex.: o resumo "total" acima do calendário), pra ficar
+   claro que é uma opção disponível. Antes era só um tom de cinza quase
+   igual ao dia fechado do lado — clientes achavam que a loja tava fechada
+   naqueles dias e paravam de tentar agendar. */
 .dia-cel--livre {
   background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--cor-borda-dourada);
   color: var(--cor-branco);
   cursor: pointer;
-  transition: background var(--transicao-rapida);
+  transition: background var(--transicao-rapida), border-color var(--transicao-rapida);
 }
 
 .dia-cel--livre:hover {
   background: rgba(200, 162, 74, 0.18);
+  border-color: var(--cor-dourado);
 }
 
 /* Dias de outro mês e dias já passados: apagados */
