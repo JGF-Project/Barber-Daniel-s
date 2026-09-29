@@ -353,7 +353,6 @@
 }
 
 /* Dias de outro mês e dias já passados: apagados */
-.dia-cel--fora { color: rgba(255, 255, 255, 0.18); }
 .dia-cel--passado { color: rgba(255, 255, 255, 0.22); }
 
 /* Dias fechados (barbearia não abre): riscados */

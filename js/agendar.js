@@ -703,6 +703,10 @@ const Agendamento = {
       const diaSemana = d.getUTCDay(); // 0=dom … 6=sáb
 
       const noMes = cm === mes;
+      if (!noMes) {
+        celulas += '<span class="dia-cel dia-cel--vazio" aria-hidden="true"></span>';
+        continue;
+      }
       const passado = ymd < hojeYmd;
       const indisponivel = !this.diaDisponivel(ymd, diaSemana);
       const ehHoje = ymd === hojeYmd;
