@@ -38,8 +38,15 @@ function calcularSlotsLivres(candidatos, { duracaoMs, agora, duracaoTipicaMs, pa
     pontos.add(o.inicio - duracaoMs);
   }));
 
+  // Último início possível de cada expediente (fecha - duração). Fora da grade
+  // quase sempre (plano de 40min fechando 20:00 → 19:20), e sem ele quem abre a
+  // tela depois do último ponto da grade via "Nenhum horário" com 19:20 livre.
+  // Só entra quando a lista normal ficou vazia, pra não poluir o dia todo.
+  const pontosFinais = new Set(candidatos.map((c) => c.fecha - duracaoMs));
+
+  const avaliar = (pontosTeste) => {
   const slots = [];
-  for (const inicio of [...pontos].sort((a, b) => a - b)) {
+  for (const inicio of [...pontosTeste].sort((a, b) => a - b)) {
     const fim = inicio + duracaoMs;
     if (inicio < agora) continue; // já passou (ou está em cima da hora)
 
@@ -70,6 +77,10 @@ function calcularSlotsLivres(candidatos, { duracaoMs, agora, duracaoTipicaMs, pa
   // oferece mesmo assim — nada é pior que nada.
   const bons = slots.filter((s) => !s.fragmenta);
   return (bons.length ? bons : slots).map((s) => s.inicio).sort((a, b) => a - b);
+  };
+
+  const normal = avaliar(pontos);
+  return normal.length ? normal : avaliar(pontosFinais);
 }
 
 /* Exporta para o teste em Node; no browser `module` não existe e isso é ignorado. */

@@ -191,4 +191,16 @@ teste('mudar a duração do serviço muda os horários oferecidos', () => {
   assert.ok(!de60.includes('11:30'), '60min não cabe antes do almoço');
 });
 
+// --- Fim do expediente fora da grade de 30min ---
+teste('plano de 40min fechando 20:00: às 19:05 ainda oferece 19:20 (último início possível)', () => {
+  const r = slots({ fecha: '20:00', duracaoMin: 40, agora: h('19:05') });
+  assert.deepStrictEqual(r, ['19:20'], `Veio: ${r.join(', ')}`);
+});
+
+teste('a grade de 30min continua sendo a regra: 19:20 não aparece se há horário normal no dia', () => {
+  const r = slots({ fecha: '20:00', duracaoMin: 40 });
+  assert.ok(!r.includes('19:20'), `Veio: ${r.join(', ')}`);
+  assert.ok(r.includes('19:00'));
+});
+
 console.log(`\n${passou} de ${passou + (process.exitCode ? 1 : 0)} passaram\n`);
