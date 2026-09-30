@@ -51,6 +51,16 @@ function sabadoDaSemanaYmd() {
   return partesNoFuso(new Date(Date.now() + diasAteSabado * 86400000)).ymd;
 }
 
+/** Dia pelo qual a cota do plano é consultada: a sexta da semana em que ele
+ * pode agendar. No domingo já é a semana seguinte (senão quem usou a visita
+ * da semana que acaba veria o plano bloqueado justo quando ele abre). Sábado
+ * não tem dia agendável: usa o agora. */
+function referenciaCotaPlano() {
+  const { diaSemana } = partesNoFuso(new Date());
+  if (diaSemana === 6) return null;
+  return new Date(Date.now() + (diaSemana === 0 ? 5 : 5 - diaSemana) * 86400000);
+}
+
 /* ============================================================
    MODAL — substitui os pop-ups nativos (window.confirm/alert)
 ============================================================ */
@@ -138,7 +148,8 @@ const Assinatura = {
       return;
     }
     await this.marcarAtrasados(); // marca automaticamente antes de recarregar cota
-    const args = inicio ? { p_inicio: inicio.toISOString() } : {};
+    const ref = inicio || referenciaCotaPlano();
+    const args = ref ? { p_inicio: ref.toISOString() } : {};
     const { data } = await sb.rpc('minha_assinatura', args);
     Estado.assinaturas = data || [];
     this.aplicar();
@@ -654,8 +665,7 @@ const Agendamento = {
       const abre = new Date(`${ymd}T${config.abre}${OFFSET}`).getTime();
       const fecha = new Date(`${ymd}T${config.fecha}${OFFSET}`).getTime();
       const bloqueios = Estado.bloqueiosPorBarbeiro[id] || [];
-      const bloqueadoTotal = bloqueios.some((b) => b.inicio <= abre && b.fim >= fecha);
-      return !bloqueadoTotal;
+      return !diaTotalmenteBloqueado(abre, fecha, bloqueios);
     });
   },
 

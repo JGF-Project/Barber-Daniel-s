@@ -203,4 +203,21 @@ teste('a grade de 30min continua sendo a regra: 19:20 não aparece se há horár
   assert.ok(r.includes('19:00'));
 });
 
+// --- Calendário: dia fechado por ausências ---
+const { diaTotalmenteBloqueado } = require('../js/slots.js');
+const bl = (a, b) => ({ inicio: h(a), fim: h(b) });
+teste('ausência que cobre o expediente inteiro fecha o dia', () => {
+  assert.ok(diaTotalmenteBloqueado(h('10:00'), h('20:00'), [bl('00:00', '23:59')]));
+  assert.ok(diaTotalmenteBloqueado(h('10:00'), h('20:00'), [bl('10:00', '20:00')]));
+});
+teste('duas ausências coladas (manhã + tarde) fecham o dia como uma só, em qualquer ordem', () => {
+  assert.ok(diaTotalmenteBloqueado(h('10:00'), h('20:00'), [bl('15:00', '20:00'), bl('10:00', '15:00')]));
+});
+teste('qualquer buraco entre ausências mantém o dia aberto', () => {
+  assert.ok(!diaTotalmenteBloqueado(h('10:00'), h('20:00'), [bl('10:00', '15:00'), bl('15:05', '20:00')]));
+  assert.ok(!diaTotalmenteBloqueado(h('10:00'), h('20:00'), [bl('10:05', '20:00')]));
+  assert.ok(!diaTotalmenteBloqueado(h('10:00'), h('20:00'), [bl('10:00', '19:55')]));
+  assert.ok(!diaTotalmenteBloqueado(h('10:00'), h('20:00'), []));
+});
+
 console.log(`\n${passou} de ${passou + (process.exitCode ? 1 : 0)} passaram\n`);

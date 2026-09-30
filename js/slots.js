@@ -83,5 +83,19 @@ function calcularSlotsLivres(candidatos, { duracaoMs, agora, duracaoTipicaMs, pa
   return normal.length ? normal : avaliar(pontosFinais);
 }
 
+/**
+ * O expediente [abre, fecha] está inteiro coberto por ausências? Vale a união:
+ * duas ausências coladas (manhã + tarde) fecham o dia como uma só.
+ * bloqueios: [{ inicio, fim }] em ms
+ */
+function diaTotalmenteBloqueado(abre, fecha, bloqueios) {
+  let cursor = abre;
+  for (const b of [...bloqueios].sort((x, y) => x.inicio - y.inicio)) {
+    if (b.inicio > cursor) break;
+    cursor = Math.max(cursor, b.fim);
+  }
+  return cursor >= fecha;
+}
+
 /* Exporta para o teste em Node; no browser `module` não existe e isso é ignorado. */
-if (typeof module !== 'undefined') module.exports = { calcularSlotsLivres };
+if (typeof module !== 'undefined') module.exports = { calcularSlotsLivres, diaTotalmenteBloqueado };
