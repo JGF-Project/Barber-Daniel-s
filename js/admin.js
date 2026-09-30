@@ -2278,8 +2278,8 @@ function estilizarSelect(select) {
 const PASSO_FAIXA_MS = 5 * 60000; // 5 min: o Daniel encaixa em janelas curtas
 const PASSO_MINUTOS_ADMIN = 30;   // mesma grade base da tela do cliente
 
-/** Intervalos livres do barbeiro no dia, já descontando almoço, bloqueios e agendamentos. */
-async function janelasLivres(barbeiroId, ymd) {
+/** Expediente e ocupações (almoço, bloqueios, agendamentos) do barbeiro no dia, em ms; null se fechado. */
+async function agendaDoDia(barbeiroId, ymd) {
   const diaSemana = new Date(`${ymd}T12:00:00Z`).getUTCDay();
   const [ocupadosRes, horarioRes] = await Promise.all([
     sb.rpc('horarios_ocupados', { dia: ymd, barbeiro: barbeiroId }),
@@ -2288,14 +2288,24 @@ async function janelasLivres(barbeiroId, ymd) {
   ]);
 
   const h = horarioRes.data;
-  if (ocupadosRes.error || horarioRes.error || !h || h.fechado || !h.abre || !h.fecha) return [];
+  if (ocupadosRes.error || horarioRes.error || !h || h.fechado || !h.abre || !h.fecha) return null;
 
-  const abre = new Date(`${ymd}T${h.abre}${OFFSET}`).getTime();
-  const fecha = new Date(`${ymd}T${h.fecha}${OFFSET}`).getTime();
-  const ocupados = (ocupadosRes.data || [])
-    .map((o) => ({ inicio: new Date(o.inicio).getTime(), fim: new Date(o.fim).getTime() }))
-    .sort((a, b) => a.inicio - b.inicio);
+  return {
+    abre: new Date(`${ymd}T${h.abre}${OFFSET}`).getTime(),
+    fecha: new Date(`${ymd}T${h.fecha}${OFFSET}`).getTime(),
+    ocupados: (ocupadosRes.data || [])
+      .map((o) => ({ inicio: new Date(o.inicio).getTime(), fim: new Date(o.fim).getTime() }))
+      .sort((a, b) => a.inicio - b.inicio),
+  };
+}
 
+/** Intervalos livres do barbeiro no dia, já descontando almoço, bloqueios e agendamentos. */
+async function janelasLivres(barbeiroId, ymd) {
+  const agenda = await agendaDoDia(barbeiroId, ymd);
+  return agenda ? janelasDe(agenda) : [];
+}
+
+function janelasDe({ abre, fecha, ocupados }) {
   const janelas = [];
   let cursor = abre;
   for (const o of ocupados) {
@@ -2681,13 +2691,15 @@ const NovoAgendamento = {
 
     const duracaoMin = this.duracaoAtualMin();
     const barbeiroId = $('#agenda-barbeiro').value;
-    this.janelas = await janelasLivres(barbeiroId, this.data.value);
+    const agenda = await agendaDoDia(barbeiroId, this.data.value);
+    this.janelas = agenda ? janelasDe(agenda) : [];
 
     if (!duracaoMin) { this.horario.innerHTML = '<option value="">Escolha um serviço</option>'; return; }
 
-    // As janelas livres já descontaram almoço, bloqueios e agendamentos, então
-    // aqui elas entram como "um expediente sem nada ocupado" para a mesma função.
-    const candidatos = this.janelas.map((j) => ({ abre: j.inicio, fecha: j.fim, ocupados: [] }));
+    // Mesmas entradas da tela do cliente (expediente inteiro + ocupações). Antes
+    // cada janela livre virava um "expediente" e a grade de 30min partia do fim
+    // do compromisso anterior (14:35, 15:05, 15:35…), sumindo com o 16:00 livre.
+    const candidatos = agenda ? [agenda] : [];
     const duracoes = this.servicos.map((s) => s.duracao_min);
     const contagem = new Map();
     duracoes.forEach((d) => contagem.set(d, (contagem.get(d) || 0) + 1));
