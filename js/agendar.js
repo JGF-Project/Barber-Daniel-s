@@ -12,7 +12,7 @@
    horário candidato (ver calcularSlotsLivres). */
 const PASSO_MINUTOS = 30;
 /* Antecedência mínima para agendar (em minutos) */
-const ANTECEDENCIA_MIN = 30;
+const ANTECEDENCIA_MIN = 10;
 
 /* Nomes completos dos meses para o cabeçalho do calendário */
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
