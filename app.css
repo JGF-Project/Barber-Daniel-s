@@ -2613,3 +2613,59 @@ input[type="datetime-local"] {
   border-color: var(--cor-dourado);
   background: rgba(200, 162, 74, 0.12);
 }
+
+/* ============================================================
+   HISTÓRICO DO CLIENTE (nome clicável na agenda do painel)
+============================================================ */
+.nome-cliente {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline dotted var(--cor-borda-dourada);
+  text-underline-offset: 3px;
+}
+
+.nome-cliente:hover,
+.nome-cliente:focus-visible {
+  color: var(--cor-dourado-claro);
+}
+
+.historico {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-2);
+  margin-bottom: var(--espaco-3);
+}
+
+.historico__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espaco-2);
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--raio-pequeno);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.historico__info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.historico__info strong {
+  font-weight: 500;
+  color: var(--cor-branco);
+  font-size: 0.9rem;
+}
+
+.historico__info span {
+  font-size: 0.8125rem;
+  color: var(--cor-texto-suave);
+}

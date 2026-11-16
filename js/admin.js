@@ -280,6 +280,62 @@ function pedirNumero({ titulo, texto, prefixo, valorInicial, rotuloSalvar, aria,
   });
 }
 
+/**
+ * Histórico do cliente (toque no nome, na agenda): últimos 30 agendamentos com
+ * serviço, quando, barbeiro e status. Só leitura — uma consulta por abertura
+ * (rpc historico_cliente, que respeita a RLS de quem está logado).
+ */
+let historicoSeq = 0;
+async function abrirHistoricoCliente({ clienteId, celular, nome }) {
+  const modal = $('#modal-historico');
+  const lista = $('#modal-historico-lista');
+  const resumo = $('#modal-historico-resumo');
+  const minha = ++historicoSeq; // resposta de uma abertura antiga não sobrescreve a atual
+  $('#modal-historico-titulo').textContent = nome;
+  resumo.textContent = '';
+  lista.innerHTML = '<p class="app-carregando">Carregando…</p>';
+  modal.hidden = false;
+  travarRolagem();
+  $('#modal-historico-titulo').focus();
+
+  const fechaveis = [...modal.querySelectorAll('[data-fechar-historico]')];
+  const fechar = () => {
+    modal.hidden = true;
+    destravarRolagem();
+    fechaveis.forEach((el) => el.removeEventListener('click', fechar));
+    document.removeEventListener('keydown', aoTeclar);
+  };
+  const aoTeclar = (e) => { if (e.key === 'Escape') fechar(); };
+  fechaveis.forEach((el) => el.addEventListener('click', fechar));
+  document.addEventListener('keydown', aoTeclar);
+
+  const { data, error } = await sb.rpc('historico_cliente', {
+    p_cliente_id: clienteId || null, p_celular: celular || null, p_nome: nome,
+  });
+  if (minha !== historicoSeq || modal.hidden) return;
+  if (error) {
+    lista.innerHTML = '<p class="app-erro">Não foi possível carregar o histórico.</p>';
+    return;
+  }
+  if (!data.length) {
+    lista.innerHTML = '<p class="app-aviso-passo">Nenhum agendamento encontrado.</p>';
+    return;
+  }
+  const conta = (st) => data.filter((a) => a.status === st).length;
+  const partes = [`${data.length} agendamento${data.length > 1 ? 's' : ''}${data.length === 30 ? ' (os 30 mais recentes)' : ''}`];
+  if (conta('cancelado')) partes.push(`${conta('cancelado')} cancelado${conta('cancelado') > 1 ? 's' : ''}`);
+  if (conta('falta')) partes.push(`${conta('falta')} falta${conta('falta') > 1 ? 's' : ''}`);
+  resumo.textContent = partes.join(' · ');
+  lista.innerHTML = data.map((a) => `
+    <div class="historico__item">
+      <div class="historico__info">
+        <strong>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(a.servicos || 'Serviço não informado')}</strong>
+        <span>${formatarDataHora(a.inicio)}${a.barbeiro ? ` · ${escaparHtml(a.barbeiro)}` : ''}</span>
+      </div>
+      <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
+    </div>`).join('');
+}
+
 /** Valor cobrado, em CENTAVOS (mostra e lê reais: "35,50"). 0 = falta. */
 function pedirValor(centavosAtuais) {
   return pedirNumero({
@@ -800,7 +856,7 @@ const Agenda = {
         <span class="etiqueta-status etiqueta-status--${a.status}">${ROTULO_STATUS[a.status] || a.status}</span>
       </div>
       <div class="bloco-agendamento__corpo">
-        <strong>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}${escaparHtml(cliente)}</strong>
+        <strong>${a.via_assinatura ? '<span class="cartao-agendamento__coroa" title="Pelo plano mensal">♛</span> ' : ''}<button class="nome-cliente" type="button" data-cliente-id="${a.cliente_id || ''}" data-celular="${escaparHtml(a.perfis?.celular || a.cliente_celular || '')}" data-nome="${escaparHtml(cliente)}" title="Ver o histórico deste cliente">${escaparHtml(cliente)}</button></strong>
         <span>${escaparHtml(serv.nomes)} · ${escaparHtml(celular)}${celular !== 'sem celular' ? ` <a class="link-whatsapp" href="https://wa.me/55${celular.replace(/\D/g, '')}?text=${encodeURIComponent(msgWhats)}" target="_blank" rel="noopener" title="Chamar no WhatsApp">📲</a>` : ''}${semConta}</span>
       </div>
       <div class="bloco-agendamento__rodape">
@@ -815,6 +871,13 @@ const Agenda = {
 
   /** Liga os cliques dos blocos recém-renderizados: editar valor, cancelar, apagar */
   ligarAcoes(area) {
+    // Nome do cliente → histórico dele (serviço e quando)
+    $$('.nome-cliente', area).forEach((b) => {
+      b.addEventListener('click', () => abrirHistoricoCliente({
+        clienteId: b.dataset.clienteId, celular: b.dataset.celular, nome: b.dataset.nome,
+      }));
+    });
+
     // Editar valor: clica no ícone ✏ e edita no modal do site
     $$('.valor-btn', area).forEach((b) => {
       b.addEventListener('click', async () => {
