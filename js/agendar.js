@@ -463,6 +463,7 @@ const Agendamento = {
         Estado.barbeiroEscolhido = Estado.semPreferencia
           ? null
           : Estado.barbeiros.find((b) => b.id === botao.dataset.id);
+        this.rolarParaServicos();
         // Trocar de barbeiro zera dia/horário e recarrega a disponibilidade dele
         Estado.diaEscolhido = null;
         Estado.horarioEscolhido = null;
@@ -472,6 +473,17 @@ const Agendamento = {
         this.atualizarResumo();
       });
     });
+  },
+
+  /** Escolheu o barbeiro: leva a tela ao passo 2, pra ficar claro que algo aconteceu.
+   * Fica parada se o cliente já escolheu serviço (está só trocando de barbeiro)
+   * ou se o passo 2 já está na metade de cima da tela. */
+  rolarParaServicos() {
+    if (Estado.servicosEscolhidos.length) return;
+    const passo = $('#lista-servicos').closest('.passo');
+    if (passo.getBoundingClientRect().top < window.innerHeight / 2) return;
+    const reduzir = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    passo.scrollIntoView({ behavior: reduzir ? 'auto' : 'smooth', block: 'start' });
   },
 
   async carregarServicos() {
