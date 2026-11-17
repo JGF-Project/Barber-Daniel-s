@@ -2643,6 +2643,7 @@ input[type="datetime-local"] {
 
 .historico__item {
   display: flex;
+  flex-wrap: wrap; /* sem espaço pro nome ao lado da etiqueta, ela desce em vez de sobrepor */
   align-items: center;
   justify-content: space-between;
   gap: var(--espaco-2);
@@ -2668,4 +2669,64 @@ input[type="datetime-local"] {
 .historico__info span {
   font-size: 0.8125rem;
   color: var(--cor-texto-suave);
+}
+
+/* Janela do histórico: título e botões fixos, só a lista rola (cliente com muitos agendamentos) */
+.modal__caixa--historico {
+  display: flex;
+  flex-direction: column;
+  max-width: 440px;
+  max-height: 90svh;
+  overflow: hidden;
+}
+
+.modal__caixa--historico .modal__titulo {
+  padding: 0 2.25rem; /* espaço pro X no canto */
+  overflow-wrap: break-word;
+}
+
+.modal__caixa--historico .historico {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.modal__x {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--cor-texto-suave);
+  cursor: pointer;
+}
+
+.modal__x:hover,
+.modal__x:focus-visible {
+  color: var(--cor-branco);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.modal__x svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Nome de serviço longo ("navalhado/social/zero") quebra em vez de passar por cima da etiqueta */
+.historico__info {
+  flex: 1 1 12rem;
+  text-align: left;
+  overflow-wrap: break-word;
+}
+
+.historico__item .etiqueta-status {
+  flex-shrink: 0;
 }
