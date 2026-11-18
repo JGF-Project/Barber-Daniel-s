@@ -1203,6 +1203,9 @@ const MeusAgendamentos = {
           return;
         }
         await Assinatura.carregar(); // cancelar com 1h+ devolve a visita
+        // ...e o card do plano na aba "Novo agendamento" precisa ser redesenhado: ele foi
+        // criado travado ("já usou desta semana") e só destrava se a lista for refeita.
+        await Agendamento.carregarServicos();
         this.carregar();
       });
     });
