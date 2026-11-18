@@ -1152,10 +1152,10 @@ const MeusAgendamentos = {
       .map((a) => {
         const inicioMs = new Date(a.inicio).getTime();
         const futuro = inicioMs > agora;
-        // Avulso: cancelamento só com 1h de antecedência. Plano: até a hora do corte
-        // (cancelar devolve a visita, o Daniel não quer que o cliente perca). A policy no banco espelha.
+        // Cancelamento só vale com 1h de antecedência, pra qualquer cliente.
+        // Abaixo disso o agendamento é contabilizado. A policy no banco recusa de qualquer jeito.
         const diferencaMs = inicioMs - agora;
-        const travadoPor1h = !a.via_assinatura && diferencaMs <= 60 * 60 * 1000;
+        const travadoPor1h = diferencaMs <= 60 * 60 * 1000;
         const podeCancelar = a.status === 'confirmado' && futuro && !travadoPor1h;
         const podeApagar = podeApagarItem(a);
         const serv = servicosResumo(a);
